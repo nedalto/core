@@ -1,0 +1,39 @@
+{
+  "name": "nedalto",
+  "private": true,
+  "license": "EUPL-1.2",
+  "author": "Alejandro Ojeda Gutiérrez",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/nedalto/core.git"
+  },
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "type": "module",
+  "scripts": {
+    "format": "oxfmt",
+    "format:check": "oxfmt --check",
+    "lint": "oxlint",
+    "lint:fix": "oxlint --fix"
+  },
+  "devDependencies": {
+    "oxfmt": "^0.72.0",
+    "oxlint": "^1.87.0",
+    "oxlint-tsgolint": "^7.0.2003",
+    "typescript": "^7.0.2"
+  },
+  "devEngines": {
+    "packageManager": {
+      "name": "npm",
+      "version": "^11.0.0",
+      "onFail": "error"
+    },
+    "runtime": {
+      "name": "node",
+      "version": "^26.0.0",
+      "onFail": "error"
+    }
+  }
+}

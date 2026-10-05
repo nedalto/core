@@ -1,0 +1,32 @@
+{
+  "name": "@nedalto/hub",
+  "version": "0.0.1",
+  "description": "A local-first smart home hub built exclusively on the Matter protocol",
+  "license": "EUPL-1.2",
+  "author": "Alejandro Ojeda Gutiérrez",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/nedalto/core.git",
+    "directory": "apps/hub"
+  },
+  "type": "module",
+  "scripts": {
+    "type": "tsc",
+    "test": "node --test \"test/**/*.test.ts\"",
+    "start": "node --env-file-if-exists=.env src/main.ts"
+  },
+  "dependencies": {
+    "@nedalto/config": "*",
+    "@nedalto/contract": "*",
+    "@nedalto/database": "*",
+    "@nedalto/logger": "*",
+    "@nedalto/matter": "*",
+    "@nedalto/server": "*"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.4"
+  },
+  "engines": {
+    "node": ">=26.0.0"
+  }
+}

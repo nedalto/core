@@ -1,0 +1,14 @@
+[
+  {
+    "label": "Type",
+    "command": "npm run --workspaces type"
+  },
+  {
+    "label": "Test",
+    "command": "npm run --workspaces test"
+  },
+  {
+    "label": "Start Hub",
+    "command": "npm run --workspace=@nedalto/hub start"
+  }
+]

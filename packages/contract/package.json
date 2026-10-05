@@ -1,0 +1,19 @@
+{
+  "name": "@nedalto/contract",
+  "private": true,
+  "license": "EUPL-1.2",
+  "author": "Alejandro Ojeda Gutiérrez",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/nedalto/core.git",
+    "directory": "packages/contract"
+  },
+  "type": "module",
+  "scripts": {
+    "type": "tsc",
+    "test": "node --test \"test/**/*.test.ts\""
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.4"
+  }
+}

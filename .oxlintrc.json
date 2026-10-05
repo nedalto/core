@@ -1,0 +1,18 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["eslint", "typescript", "unicorn", "oxc", "import", "node", "promise"],
+  "categories": {
+    "correctness": "error",
+    "suspicious": "error",
+    "perf": "warn"
+  },
+  "options": { "typeAware": true },
+  "env": { "node": true },
+  "rules": {
+    "no-console": "warn",
+    "typescript/no-misused-promises": "error",
+    "typescript/switch-exhaustiveness-check": "error",
+    "typescript/no-deprecated": "warn",
+    "unicorn/filename-case": ["error", { "case": "kebabCase" }]
+  }
+}
