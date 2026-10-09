@@ -8,7 +8,11 @@
     "command": "npm run --workspaces test"
   },
   {
-    "label": "Start Hub",
+    "label": "Hub e2e",
+    "command": "npm run --workspace=@nedalto/hub e2e"
+  },
+  {
+    "label": "Hub start",
     "command": "npm run --workspace=@nedalto/hub start"
   }
 ]
