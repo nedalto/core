@@ -10,9 +10,49 @@
   "env": { "node": true },
   "rules": {
     "no-console": "warn",
+    "typescript/ban-ts-comment": "error",
     "typescript/no-misused-promises": "error",
+    "typescript/no-unsafe-type-assertion": "error",
     "typescript/switch-exhaustiveness-check": "error",
     "typescript/no-deprecated": "warn",
     "unicorn/filename-case": ["error", { "case": "kebabCase" }]
-  }
+  },
+  "overrides": [
+    {
+      "files": ["packages/**/*.ts"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": ["@nedalto/**", "!@nedalto/contract/**"],
+                "message": "Packages may only import @nedalto/contract subpaths; apps/hub composes them."
+              },
+              {
+                "group": ["@matter/**"],
+                "message": "Only packages/matter talks to the Matter SDK."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["packages/matter/**/*.ts"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": ["@nedalto/**", "!@nedalto/contract/**"],
+                "message": "Packages may only import @nedalto/contract subpaths; apps/hub composes them."
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
 }
