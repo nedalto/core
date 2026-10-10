@@ -39,7 +39,7 @@ The end-to-end suite runs separately and needs IPv6, which Matter requires:
 - An invariant: a test or a type.
   If it cannot be checked, do not state it.
 - A cross-cutting decision with alternatives: an ADR in `docs/decisions/`, copied from `0000-template.md`.
-- What clients can rely on (methods, events, errors, ordering): `docs/protocol.md`.
+- What clients need beyond the contract types (encoding, errors, handshake, ordering, versioning): `docs/protocol.md`.
 - What operators configure (the configuration file, environment variables): `docs/configuration.md`.
 
 ## Design
@@ -55,3 +55,4 @@ The end-to-end suite runs separately and needs IPv6, which Matter requires:
 
 - Everything in the repository is in English: code, comments, docs, commits and PRs.
 - Markdown: one sentence per line, no hard wrapping.
+- A standalone function is an arrow when its body is a single expression and a `function` declaration otherwise; functions held in object properties and inline callbacks are arrows.
