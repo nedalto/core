@@ -11,6 +11,10 @@
   "rules": {
     "no-console": "warn",
     "typescript/ban-ts-comment": "error",
+    "typescript/no-floating-promises": [
+      "error",
+      { "allowForKnownSafeCalls": [{ "from": "package", "package": "node:test", "name": ["describe", "test"] }] }
+    ],
     "typescript/no-misused-promises": "error",
     "typescript/no-unsafe-type-assertion": "error",
     "typescript/switch-exhaustiveness-check": "error",
@@ -52,6 +56,12 @@
             ]
           }
         ]
+      }
+    },
+    {
+      "files": ["packages/contract/src/common/ids.ts"],
+      "rules": {
+        "typescript/no-unsafe-type-assertion": "off"
       }
     }
   ]

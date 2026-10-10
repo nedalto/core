@@ -9,6 +9,9 @@
     "directory": "packages/contract"
   },
   "type": "module",
+  "exports": {
+    "./*.ts": "./src/*.ts"
+  },
   "scripts": {
     "type": "tsc",
     "test": "node --test \"test/**/*.test.ts\""
