@@ -55,4 +55,6 @@ The end-to-end suite runs separately and needs IPv6, which Matter requires:
 
 - Everything in the repository is in English: code, comments, docs, commits and PRs.
 - Markdown: one sentence per line, no hard wrapping.
+- Name an interface after its role and its implementation after the technology behind it (`Database`, `SqliteDatabase`, `createSqliteDatabase`); no `Provider` or `Manager` suffixes.
+- Do not name a declaration after an export of a module it is used alongside (`Server` from `node:http`); where two such names meet, alias the module's import (`Logger as SdkLogger`).
 - A standalone function is an arrow when its body is a single expression and a `function` declaration otherwise; functions held in object properties and inline callbacks are arrows.

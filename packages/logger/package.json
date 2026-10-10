@@ -9,12 +9,16 @@
     "directory": "packages/logger"
   },
   "type": "module",
+  "exports": {
+    "./*.ts": "./src/*.ts"
+  },
   "scripts": {
     "type": "tsc",
     "test": "node --test \"test/**/*.test.ts\""
   },
   "dependencies": {
-    "@nedalto/contract": "*"
+    "@nedalto/contract": "*",
+    "rotating-file-stream": "^3.2.10"
   },
   "devDependencies": {
     "@types/node": "^26.6.4"
