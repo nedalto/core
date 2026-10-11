@@ -9,6 +9,9 @@
     "directory": "packages/database"
   },
   "type": "module",
+  "exports": {
+    "./database.ts": "./src/database.ts"
+  },
   "scripts": {
     "type": "tsc",
     "test": "node --test \"test/**/*.test.ts\""

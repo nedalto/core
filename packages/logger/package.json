@@ -10,7 +10,8 @@
   },
   "type": "module",
   "exports": {
-    "./*.ts": "./src/*.ts"
+    "./log-file.ts": "./src/log-file.ts",
+    "./logger.ts": "./src/logger.ts"
   },
   "scripts": {
     "type": "tsc",
