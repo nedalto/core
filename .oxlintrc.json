@@ -63,6 +63,12 @@
       "rules": {
         "typescript/no-unsafe-type-assertion": "off"
       }
+    },
+    {
+      "files": ["packages/database/src/rows.ts"],
+      "rules": {
+        "typescript/no-unsafe-type-assertion": "off"
+      }
     }
   ]
 }
