@@ -11,7 +11,7 @@ A test earns its place by catching a change in behavior that nothing else would 
 - If no test can fail for a defect, protect against it with a type instead.
 - Never skip, loosen or delete a failing test to get green: fix the code, or stop and say why the test is wrong.
 - Do not test what the type system guarantees; input crossing a boundary is untyped until validated, so validators are tested.
-- Do not check the same behavior twice, and do not copy a literal from the source into an assertion.
+- Do not check the same behavior twice, and do not copy a literal from the source into an assertion unless the value is what the code promises (a default, a format, a message under test).
 - Assert errors by class, code and data; match the message only when the message is the behavior under test.
 - One `describe` per unit exported from its module, named exactly as the export, and no `describe` for the file.
 - Each test name states one behavior and its condition, in the present tense: `returns the defaults when the file is missing`.
