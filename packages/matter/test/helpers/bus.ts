@@ -20,10 +20,18 @@ export class RecordingBus implements DomainEventBus {
         };
     }
 
-    /** Resolves with the payload of the next `name` event. */
-    next<K extends keyof DomainEventMap>(name: K): Promise<DomainEventMap[K]> {
+    /** Resolves with the payload of the next `name` event that satisfies `matches`. */
+    next<K extends keyof DomainEventMap>(
+        name: K,
+        matches: (payload: DomainEventMap[K]) => boolean = () => true,
+    ): Promise<DomainEventMap[K]> {
         return new Promise((resolve) => {
-            this.#emitter.once(name, resolve);
+            const unsubscribe = this.on(name, (payload) => {
+                if (matches(payload)) {
+                    unsubscribe();
+                    resolve(payload);
+                }
+            });
         });
     }
 }

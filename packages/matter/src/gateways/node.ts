@@ -1,5 +1,4 @@
 import "../sdk-config.ts";
-import { ObserverGroup } from "@matter/main";
 import { BasicInformationClient } from "@matter/main/behaviors/basic-information";
 import type { ClientNode, CommissioningClient, ServerNode } from "@matter/main/node";
 import { ManualPairingCodeCodec, type QrCodeData, QrPairingCodeCodec } from "@matter/main/types";
@@ -11,16 +10,12 @@ import type { DomainEventBus } from "@nedalto/contract/events.ts";
 import type { Logger } from "@nedalto/contract/logger/ports.ts";
 import { NodeNotFoundError } from "@nedalto/contract/node/errors.ts";
 import type { NodeGateway } from "@nedalto/contract/node/ports.ts";
-import type { CommissioningResult, NodeInfo, NodeRecord } from "@nedalto/contract/node/types.ts";
+import type { CommissioningResult, NodeInfo } from "@nedalto/contract/node/types.ts";
 
 import { classifyCommissioningError, classifyDecommissioningError } from "../errors.ts";
+import type { Identity } from "../identity.ts";
 
 const QR_PREFIX = "MT:";
-
-interface TrackedNode {
-    readonly node: ClientNode;
-    readonly observers: ObserverGroup;
-}
 
 /** A `ValidationError` about the setup code, in the shape that schema validation gives its issues. */
 const invalidSetupCode = (message: string, cause?: unknown): ValidationError =>
@@ -36,42 +31,31 @@ const nonBlank = (value: string | undefined): string | undefined => value?.trim(
 export class SdkNodeGateway implements NodeGateway {
     readonly #logger: Logger;
     readonly #bus: DomainEventBus;
+    readonly #identity: Identity;
     readonly #controller: ServerNode;
-    readonly #nodes = new Map<NodeId, TrackedNode>();
     readonly #decommissioning = new Set<NodeId>();
+    readonly #unobserve: () => void;
 
-    constructor(logger: Logger, bus: DomainEventBus, controller: ServerNode) {
+    constructor(logger: Logger, bus: DomainEventBus, identity: Identity, controller: ServerNode) {
         this.#logger = logger;
         this.#bus = bus;
+        this.#identity = identity;
         this.#controller = controller;
-    }
-
-    /** Tracks the SDK peer of each record, matching them by Matter node id. */
-    hydrate(records: readonly NodeRecord[]): void {
-        const peers = new Map<bigint, ClientNode>();
-        for (const peer of this.#controller.peers) {
-            const address = peer.state.commissioning.peerAddress;
-            if (address !== undefined) {
-                peers.set(address.nodeId, peer);
-            }
-        }
-        for (const record of records) {
-            const peer = peers.get(record.matterId);
-            if (peer === undefined) {
-                // The database and the fabric disagree, e.g. after restoring one of them from a backup.
-                this.#logger.warn("persisted node has no Matter peer", record.id);
-                continue;
-            }
-            this.#track(record.id, peer);
-        }
+        this.#unobserve = identity.observe((observers, { nodeId, node }) => {
+            observers.on(node.lifecycle.online, () => {
+                this.#bus.emit("node:connected", { nodeId, timestamp: Date.now() });
+            });
+            observers.on(node.lifecycle.offline, () => {
+                if (!this.#decommissioning.has(nodeId)) {
+                    this.#bus.emit("node:disconnected", { nodeId, timestamp: Date.now() });
+                }
+            });
+        });
     }
 
     /** Stops announcing the nodes' connections. */
-    stop(): void {
-        for (const { observers } of this.#nodes.values()) {
-            observers.close();
-        }
-        this.#nodes.clear();
+    close(): void {
+        this.#unobserve();
     }
 
     async commission(setupCode: string): Promise<CommissioningResult> {
@@ -90,13 +74,13 @@ export class SdkNodeGateway implements NodeGateway {
         const nodeId = createNodeId();
         const matterId = this.#matterIdOf(node);
         const endpoints = this.#endpointRecords(nodeId, node);
-        this.#track(nodeId, node);
+        this.#identity.add(nodeId, node, endpoints);
         this.#logger.info("commissioned node", nodeId, endpoints.length);
         return { node: { id: nodeId, matterId }, endpoints };
     }
 
     async decommission(nodeId: NodeId, force = false): Promise<void> {
-        const { node } = this.#tracked(nodeId);
+        const node = this.#node(nodeId);
         // The node goes offline while it leaves the fabric, which is not a disconnection to announce.
         this.#decommissioning.add(nodeId);
         try {
@@ -107,16 +91,16 @@ export class SdkNodeGateway implements NodeGateway {
         } finally {
             this.#decommissioning.delete(nodeId);
         }
-        this.#untrack(nodeId);
+        this.#identity.remove(nodeId);
         this.#logger.info("decommissioned node", nodeId, force ? "forced" : "from the fabric");
     }
 
     isReachable(nodeId: NodeId): boolean {
-        return this.#nodes.get(nodeId)?.node.lifecycle.isOnline ?? false;
+        return this.#identity.node(nodeId)?.lifecycle.isOnline ?? false;
     }
 
     getInfo(nodeId: NodeId): NodeInfo {
-        const { node } = this.#tracked(nodeId);
+        const node = this.#node(nodeId);
         const basic = node.stateOf(BasicInformationClient);
         return {
             id: nodeId,
@@ -157,32 +141,12 @@ export class SdkNodeGateway implements NodeGateway {
         return { passcode: payload.passcode, discriminator: payload.discriminator };
     }
 
-    #tracked(nodeId: NodeId): TrackedNode {
-        const tracked = this.#nodes.get(nodeId);
-        if (tracked === undefined) {
+    #node(nodeId: NodeId): ClientNode {
+        const node = this.#identity.node(nodeId);
+        if (node === undefined) {
             throw new NodeNotFoundError(nodeId);
         }
-        return tracked;
-    }
-
-    #track(nodeId: NodeId, node: ClientNode): void {
-        // The SDK's observables hand out no unsubscribe handle and a decommissioned node stays alive, so the
-        // group is what detaches the observers.
-        const observers = new ObserverGroup();
-        observers.on(node.lifecycle.online, () => {
-            this.#bus.emit("node:connected", { nodeId, timestamp: Date.now() });
-        });
-        observers.on(node.lifecycle.offline, () => {
-            if (!this.#decommissioning.has(nodeId)) {
-                this.#bus.emit("node:disconnected", { nodeId, timestamp: Date.now() });
-            }
-        });
-        this.#nodes.set(nodeId, { node, observers });
-    }
-
-    #untrack(nodeId: NodeId): void {
-        this.#nodes.get(nodeId)?.observers.close();
-        this.#nodes.delete(nodeId);
+        return node;
     }
 
     #matterIdOf(node: ClientNode): bigint {

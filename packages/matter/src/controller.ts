@@ -4,24 +4,29 @@ import { ControllerBehavior, ServerNode } from "@matter/main/node";
 
 import { InternalError } from "@nedalto/contract/common/errors.ts";
 import type { Lifecycle } from "@nedalto/contract/common/lifecycle.ts";
+import type { EndpointGateway, EndpointRepository } from "@nedalto/contract/endpoint/ports.ts";
 import type { DomainEventBus } from "@nedalto/contract/events.ts";
 import type { Logger } from "@nedalto/contract/logger/ports.ts";
 import type { NodeGateway, NodeRepository } from "@nedalto/contract/node/ports.ts";
 
+import { SdkEndpointGateway } from "./gateways/endpoint.ts";
 import { SdkNodeGateway } from "./gateways/node.ts";
+import { Identity } from "./identity.ts";
 
 /**
  * The Matter controller of the hub.
- * `node` is available between `start()` and `stop()`.
+ * `node` and `endpoint` are available between `start()` and `stop()`.
  */
 export interface MatterController extends Lifecycle {
     readonly node: NodeGateway;
+    readonly endpoint: EndpointGateway;
 }
 
 /** What the controller reads, writes and reports through. */
 export interface ControllerCollaborators {
     readonly logger: Logger;
     readonly nodeRepository: NodeRepository;
+    readonly endpointRepository: EndpointRepository;
     readonly bus: DomainEventBus;
 }
 
@@ -44,28 +49,35 @@ const BASIC_INFORMATION = {
 interface Open {
     readonly server: ServerNode;
     readonly node: SdkNodeGateway;
+    readonly endpoint: SdkEndpointGateway;
 }
 
 export class SdkMatterController implements MatterController {
     readonly #environment: Environment;
     readonly #logger: Logger;
     readonly #nodeRepository: NodeRepository;
+    readonly #endpointRepository: EndpointRepository;
     readonly #bus: DomainEventBus;
     #open: Open | undefined;
 
     /** The controller runs on `environment`, which the caller has already configured. */
-    constructor(environment: Environment, { logger, nodeRepository, bus }: ControllerCollaborators) {
+    constructor(
+        environment: Environment,
+        { logger, nodeRepository, endpointRepository, bus }: ControllerCollaborators,
+    ) {
         this.#environment = environment;
         this.#logger = logger.get("Matter");
         this.#nodeRepository = nodeRepository;
+        this.#endpointRepository = endpointRepository;
         this.#bus = bus;
     }
 
     get node(): NodeGateway {
-        if (this.#open === undefined) {
-            throw new InternalError("Matter controller accessed outside its start()/stop() window");
-        }
-        return this.#open.node;
+        return this.#opened().node;
+    }
+
+    get endpoint(): EndpointGateway {
+        return this.#opened().endpoint;
     }
 
     async start(): Promise<void> {
@@ -80,12 +92,14 @@ export class SdkMatterController implements MatterController {
             // @matter/node 0.17.9: the label of our fabric on the devices, "matter.js" by default.
             controller: { adminFabricLabel: BASIC_INFORMATION.vendorName },
         });
-        const node = new SdkNodeGateway(this.#logger, this.#bus, server);
+        const identity = new Identity(this.#logger);
+        const node = new SdkNodeGateway(this.#logger, this.#bus, identity, server);
+        const endpoint = new SdkEndpointGateway(this.#bus, identity);
         // @matter/node 0.17.9: the peers are read from storage on first access and start connecting when the
         // server goes online, so hydrating before `start()` attaches the observers before any connection.
-        node.hydrate(this.#nodeRepository.findAll());
+        identity.hydrate(server.peers, this.#nodeRepository.findAll(), this.#endpointRepository);
         await server.start();
-        this.#open = { server, node };
+        this.#open = { server, node, endpoint };
         this.#logger.notice("controller ready");
     }
 
@@ -97,8 +111,16 @@ export class SdkMatterController implements MatterController {
         this.#open = undefined;
 
         // Closing the server takes every peer offline, which would be announced as a disconnection of each node.
-        open.node.stop();
+        open.node.close();
+        open.endpoint.close();
         await open.server.close();
         this.#logger.notice("controller closed");
+    }
+
+    #opened(): Open {
+        if (this.#open === undefined) {
+            throw new InternalError("Matter controller accessed outside its start()/stop() window");
+        }
+        return this.#open;
     }
 }
