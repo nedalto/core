@@ -3,13 +3,13 @@ paths:
   - "{packages,apps}/*/{src,test,e2e}/**/*.ts"
 ---
 
-# Comment
+# Comments
 
 A comment says what the code, names and types cannot.
 When in doubt, leave it out.
 
 - `/** */` only on exported declarations, for what a reader needs on hover and the signature does not say.
-- `//` inside bodies, for a non-obvious local why.
+- `//` inside bodies, or above a declaration that is not exported, for a non-obvious local why.
 - Tool directives keep their own syntax.
 - A few lines at most; anything longer is an ADR in `docs/decisions/`, linked from the comment.
 - Do not state a guarantee a test or a type could check: write the test or the type.

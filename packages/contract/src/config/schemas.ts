@@ -49,6 +49,8 @@ const matterConfigSchema = strictSection({
     networkInterface: v.optional(v.pipe(v.string(), v.minLength(1, "networkInterface must not be empty"))),
 });
 
+export type MatterConfig = v.InferOutput<typeof matterConfigSchema>;
+
 // valibot 1.5.0: an object schema accepts an array, so `[]` needs its own check.
 const configSchema = v.pipe(
     v.unknown(),

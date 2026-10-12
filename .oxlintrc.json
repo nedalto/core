@@ -45,6 +45,7 @@
     {
       "files": ["packages/matter/**/*.ts"],
       "rules": {
+        "import/no-unassigned-import": ["error", { "allow": ["**/sdk-config.ts"] }],
         "no-restricted-imports": [
           "error",
           {
