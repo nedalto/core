@@ -3,7 +3,7 @@ paths:
   - "{packages,apps}/*/{test,e2e}/**/*.ts"
 ---
 
-# Test
+# Tests
 
 A test earns its place by catching a change in behavior that nothing else would catch.
 
@@ -19,7 +19,6 @@ A test earns its place by catching a change in behavior that nothing else would 
 - A package tests its own adapter against the real dependency (SQLite, the simulated Matter network, a WebSocket on loopback); packages that use it get fakes of the port.
 - Fakes are hand-written, implement only what the package uses, and throw on anything else.
 - A fake or helper moves to `test/helpers/` when a second test file needs it.
-- In `packages/matter`, devices run on the SDK's `NetworkSimulator`; the SDK is never mocked.
 - Never sleep: await the event or response that proves the state, use `mock.timers` for time, and to show something did not happen, await a later event ordered after it.
 - Test files run in parallel: listen on port 0, write under `mkdtemp` and remove it after the test, keep no global state.
 - `test/` runs in-process, with no multicast or mDNS; `e2e/` runs the hub over a real network and needs IPv6.

@@ -9,11 +9,15 @@
     "directory": "packages/matter"
   },
   "type": "module",
+  "exports": {
+    "./matter.ts": "./src/matter.ts"
+  },
   "scripts": {
     "type": "tsc",
     "test": "node --test \"test/**/*.test.ts\""
   },
   "dependencies": {
+    "@matter/main": "0.17.9",
     "@nedalto/contract": "*"
   },
   "devDependencies": {
