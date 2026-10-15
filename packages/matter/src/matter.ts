@@ -1,14 +1,14 @@
 import "./sdk-config.ts";
 import type { Writable } from "node:stream";
 
-import { type ControllerCollaborators, type MatterController, SdkMatterController } from "./controller.ts";
+import { type ControllerDeps, type MatterController, SdkMatterController } from "./controller.ts";
 import { configureEnvironment, type MatterOptions } from "./environment.ts";
 
 export type { MatterController } from "./controller.ts";
 export type { MatterOptions } from "./environment.ts";
 
 /** The logger, node repository and bus the controller works with, and the stream where the SDK writes its log. */
-export interface MatterCollaborators extends ControllerCollaborators {
+export interface MatterDeps extends ControllerDeps {
     readonly stream: Writable;
 }
 
@@ -18,6 +18,6 @@ export interface MatterCollaborators extends ControllerCollaborators {
  */
 export const createSdkMatterController = (
     storagePath: string,
-    { stream, ...collaborators }: MatterCollaborators,
+    { stream, ...deps }: MatterDeps,
     options: MatterOptions,
-): MatterController => new SdkMatterController(configureEnvironment(storagePath, stream, options), collaborators);
+): MatterController => new SdkMatterController(configureEnvironment(storagePath, stream, options), deps);

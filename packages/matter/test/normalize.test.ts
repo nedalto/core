@@ -3,7 +3,7 @@ import { describe, test } from "node:test";
 
 import { InternalError } from "@nedalto/contract/common/errors.ts";
 
-import { normalizeValue } from "../src/values.ts";
+import { normalizeValue } from "../src/normalize.ts";
 import { TestNetwork } from "./helpers/network.ts";
 
 describe("normalizeValue", () => {

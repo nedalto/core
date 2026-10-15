@@ -5,3 +5,6 @@ export interface RoomRecord {
     readonly id: RoomId;
     readonly name: string;
 }
+
+/** What a client sees of a room. */
+export type RoomState = RoomRecord;

@@ -23,7 +23,7 @@ export interface MatterController extends Lifecycle {
 }
 
 /** What the controller reads, writes and reports through. */
-export interface ControllerCollaborators {
+export interface ControllerDeps {
     readonly logger: Logger;
     readonly nodeRepository: NodeRepository;
     readonly endpointRepository: EndpointRepository;
@@ -61,10 +61,7 @@ export class SdkMatterController implements MatterController {
     #open: Open | undefined;
 
     /** The controller runs on `environment`, which the caller has already configured. */
-    constructor(
-        environment: Environment,
-        { logger, nodeRepository, endpointRepository, bus }: ControllerCollaborators,
-    ) {
+    constructor(environment: Environment, { logger, nodeRepository, endpointRepository, bus }: ControllerDeps) {
         this.#environment = environment;
         this.#logger = logger.get("Matter");
         this.#nodeRepository = nodeRepository;

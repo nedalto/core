@@ -18,7 +18,7 @@ import type { DomainEventBus } from "@nedalto/contract/events.ts";
 import { findSpecAttribute, findSpecCommand } from "../clusters.ts";
 import { classifyAttributeStatus, classifyCommandStatus, classifyInteractionError } from "../errors.ts";
 import type { Identity, TrackedNode } from "../identity.ts";
-import { normalizeValue } from "../values.ts";
+import { normalizeValue } from "../normalize.ts";
 
 type Path = "clusterId" | "attributeId" | "commandId" | "value" | "args";
 
