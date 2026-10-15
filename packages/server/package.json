@@ -9,14 +9,19 @@
     "directory": "packages/server"
   },
   "type": "module",
+  "exports": {
+    "./server.ts": "./src/server.ts"
+  },
   "scripts": {
     "type": "tsc",
     "test": "node --test \"test/**/*.test.ts\""
   },
   "dependencies": {
-    "@nedalto/contract": "*"
+    "@nedalto/contract": "*",
+    "ws": "^8.22.0"
   },
   "devDependencies": {
-    "@types/node": "^26.6.4"
+    "@types/node": "^26.6.4",
+    "@types/ws": "^8.18.2"
   }
 }

@@ -24,6 +24,8 @@ const serverConfigSchema = strictSection({
     ),
 });
 
+export type ServerConfig = v.InferOutput<typeof serverConfigSchema>;
+
 // rotating-file-stream 3.2.10 takes `size` as a positive integer followed by B, K, M or G, and
 // throws on zero or on any other unit.
 const FILE_SIZE_PATTERN = /^[1-9]\d*[BKMG]$/;
