@@ -1,5 +1,21 @@
-import type { RoomId } from "../common/ids.ts";
+import type { NodeId, RoomId } from "../common/ids.ts";
+import type {
+    EndpointGetParams,
+    EndpointInvokeParams,
+    EndpointReadParams,
+    EndpointSetNameParams,
+    EndpointSetRoomParams,
+    EndpointWriteParams,
+} from "../endpoint/schemas.ts";
+import type { AttributeValue, EndpointState } from "../endpoint/types.ts";
 import type { NoParams } from "../internal/valibot.ts";
+import type {
+    NodeCommissionParams,
+    NodeDecommissionParams,
+    NodeGetInfoParams,
+    NodeGetParams,
+} from "../node/schemas.ts";
+import type { NodeInfo, NodeState } from "../node/types.ts";
 import type { RoomAddParams, RoomGetParams, RoomRemoveParams, RoomSetNameParams } from "../room/schemas.ts";
 import type { RoomState } from "../room/types.ts";
 import type { Snapshot } from "../snapshot.ts";
@@ -36,6 +52,20 @@ export type HandshakeCloseCode = (typeof HandshakeCloseCode)[keyof typeof Handsh
  */
 export interface MethodMap {
     "hub.subscribe": { params: NoParams; result: Snapshot };
+
+    "node.list": { params: NoParams; result: readonly NodeState[] };
+    "node.get": { params: NodeGetParams; result: NodeState };
+    "node.getInfo": { params: NodeGetInfoParams; result: NodeInfo };
+    "node.commission": { params: NodeCommissionParams; result: NodeId };
+    "node.decommission": { params: NodeDecommissionParams; result: null };
+
+    "endpoint.list": { params: NoParams; result: readonly EndpointState[] };
+    "endpoint.get": { params: EndpointGetParams; result: EndpointState };
+    "endpoint.read": { params: EndpointReadParams; result: AttributeValue };
+    "endpoint.write": { params: EndpointWriteParams; result: null };
+    "endpoint.invoke": { params: EndpointInvokeParams; result: null };
+    "endpoint.setName": { params: EndpointSetNameParams; result: null };
+    "endpoint.setRoom": { params: EndpointSetRoomParams; result: null };
 
     "room.list": { params: NoParams; result: readonly RoomState[] };
     "room.get": { params: RoomGetParams; result: RoomState };

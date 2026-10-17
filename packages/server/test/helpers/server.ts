@@ -5,8 +5,10 @@ import { validateServerMessage } from "@nedalto/contract/server/schemas.ts";
 
 import { createHttpServer, type HttpServer } from "../../src/server.ts";
 import { RecordingBus } from "./bus.ts";
+import { FakeEndpointGateway, FakeNodeGateway } from "./gateway.ts";
 import { RecordingLogger } from "./logger.ts";
-import { MemoryRoomRepository } from "./repository.ts";
+import { MemoryEndpointRepository, MemoryNodeRepository, MemoryRoomRepository } from "./repository.ts";
+import { RecordingTransactor } from "./transactor.ts";
 
 export const TOKEN = "s3cret-token";
 
@@ -62,22 +64,29 @@ export interface ConnectOptions {
     readonly version?: string | null;
 }
 
-export interface Started {
+/** A fake for each collaborator of the server. */
+export const createFakes = () => ({
+    bus: new RecordingBus(),
+    logger: new RecordingLogger(),
+    nodeRepository: new MemoryNodeRepository(),
+    endpointRepository: new MemoryEndpointRepository(),
+    roomRepository: new MemoryRoomRepository(),
+    transactor: new RecordingTransactor(),
+    nodeGateway: new FakeNodeGateway(),
+    endpointGateway: new FakeEndpointGateway(),
+});
+
+export type Started = ReturnType<typeof createFakes> & {
     readonly server: HttpServer;
-    readonly bus: RecordingBus;
-    readonly logger: RecordingLogger;
-    readonly roomRepository: MemoryRoomRepository;
 
     /** Opens a connection that the test closes at its end. */
     readonly connect: (options?: ConnectOptions) => Promise<Client>;
-}
+};
 
 /** Starts a server on a free loopback port, to be stopped when the test ends. */
 export async function startServer(context: TestContext): Promise<Started> {
-    const bus = new RecordingBus();
-    const logger = new RecordingLogger();
-    const roomRepository = new MemoryRoomRepository();
-    const server = createHttpServer({ logger, bus, roomRepository }, { host: "127.0.0.1", port: 0, authToken: TOKEN });
+    const fakes = createFakes();
+    const server = createHttpServer(fakes, { host: "127.0.0.1", port: 0, authToken: TOKEN });
     await server.start();
 
     const sockets: WebSocket[] = [];
@@ -110,5 +119,5 @@ export async function startServer(context: TestContext): Promise<Started> {
         };
     }
 
-    return { server, bus, logger, roomRepository, connect };
+    return { ...fakes, server, connect };
 }

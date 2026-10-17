@@ -7,30 +7,43 @@ import { type JsonRpcRequest, validateSubscribeParams } from "@nedalto/contract/
 import type { MethodMap } from "@nedalto/contract/server/types.ts";
 
 import type { SUBSCRIBE_METHOD } from "./methods.ts";
+import type { EndpointView } from "./views/endpoint.ts";
+import type { NodeView } from "./views/node.ts";
 import type { RoomView } from "./views/room.ts";
 import { errorResponse, isUnexpected, notification, successResponse, toJsonRpcError } from "./wire.ts";
 
+/** What a client reads, for the snapshot of `hub.subscribe`. */
+export interface Views {
+    readonly node: NodeView;
+    readonly endpoint: EndpointView;
+    readonly room: RoomView;
+}
+
 export interface SubscriptionsDeps {
     readonly logger: Logger;
-    readonly roomView: RoomView;
+    readonly views: Views;
 }
 
 /** The connections that receive every event of the bus. */
 export class Subscriptions {
     readonly #logger: Logger;
-    readonly #roomView: RoomView;
+    readonly #views: Views;
     readonly #subscribers = new Set<WebSocket>();
 
-    constructor({ logger, roomView }: SubscriptionsDeps) {
+    constructor({ logger, views }: SubscriptionsDeps) {
         this.#logger = logger;
-        this.#roomView = roomView;
+        this.#views = views;
     }
 
     /** Answers `hub.subscribe` with the snapshot and adds the connection, with no `await` in between. */
     subscribe(ws: WebSocket, request: JsonRpcRequest): void {
         try {
             validateSubscribeParams(request.params);
-            const snapshot: MethodMap[typeof SUBSCRIBE_METHOD]["result"] = { rooms: this.#roomView.list() };
+            const snapshot: MethodMap[typeof SUBSCRIBE_METHOD]["result"] = {
+                nodes: this.#views.node.list(),
+                endpoints: this.#views.endpoint.list(),
+                rooms: this.#views.room.list(),
+            };
             ws.send(encode(successResponse(request.id, snapshot)));
             this.#subscribers.add(ws);
         } catch (error) {

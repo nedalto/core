@@ -1,9 +1,11 @@
 import * as v from "valibot";
 
 import { ValidationError } from "../common/errors.ts";
-import { isUuidV7, type RoomId } from "../common/ids.ts";
+import { type EndpointId, isUuidV7, type NodeId, type RoomId } from "../common/ids.ts";
 
 /** The brand comes from the type argument, so a parsed value arrives branded with no cast at the call site. */
+export const nodeIdSchema = v.custom<NodeId>(isUuidV7, "must be a UUID v7");
+export const endpointIdSchema = v.custom<EndpointId>(isUuidV7, "must be a UUID v7");
 export const roomIdSchema = v.custom<RoomId>(isUuidV7, "must be a UUID v7");
 
 const NAME_MAX_BYTES = 32;
