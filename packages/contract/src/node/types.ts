@@ -9,6 +9,14 @@ export interface NodeRecord {
     readonly matterId: bigint;
 }
 
+/** What a client sees of a node. */
+export interface NodeState {
+    readonly id: NodeId;
+
+    /** Whether the node has a live connection now. */
+    readonly reachable: boolean;
+}
+
 /** What a node reports about itself, from its Basic Information cluster. */
 export interface NodeInfo {
     readonly id: NodeId;

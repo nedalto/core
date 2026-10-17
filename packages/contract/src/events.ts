@@ -10,9 +10,13 @@ export type DomainEventBus = EventBus<DomainEventMap>;
 
 // The keys are checked against the map, so an event left out or misspelled does not compile.
 const eventFlags = {
+    "node:added": true,
+    "node:removed": true,
     "node:connected": true,
     "node:disconnected": true,
     "endpoint:changed": true,
+    "endpoint:renamed": true,
+    "endpoint:room-changed": true,
     "room:added": true,
     "room:renamed": true,
     "room:removed": true,

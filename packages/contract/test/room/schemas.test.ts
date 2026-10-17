@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import { ValidationError } from "../../src/common/errors.ts";
 import { createRoomId } from "../../src/common/ids.ts";
 import {
     validateAddParams,
@@ -10,24 +9,9 @@ import {
     validateRemoveParams,
     validateSetNameParams,
 } from "../../src/room/schemas.ts";
+import { rejectedPaths } from "../helpers/validation.ts";
 
 const ID = createRoomId();
-
-/** The path of each issue of the `ValidationError` that `validate` throws for `input`. */
-function rejectedPaths(validate: (input: unknown) => unknown, input: unknown): unknown[] {
-    try {
-        validate(input);
-    } catch (error) {
-        assert.ok(error instanceof ValidationError);
-        const issues = error.data?.issues;
-        assert.ok(Array.isArray(issues));
-        return issues.map((issue) => {
-            assert.ok(typeof issue === "object" && issue !== null && "path" in issue);
-            return issue.path;
-        });
-    }
-    return assert.fail(`expected ${JSON.stringify(input)} to be rejected`);
-}
 
 describe("validateListParams", () => {
     test("accepts params that are omitted or empty", () => {

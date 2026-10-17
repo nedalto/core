@@ -1,6 +1,29 @@
 import type { EndpointId, NodeId, RoomId } from "../common/ids.ts";
 import type { WireValue } from "../common/wire.ts";
 
+/** What is stored for an endpoint. */
+export interface EndpointRecord {
+    readonly id: EndpointId;
+    readonly nodeId: NodeId;
+
+    /** The Matter endpoint number, unique within its node. */
+    readonly matterNumber: number;
+    readonly name: string;
+    readonly roomId: RoomId | null;
+}
+
+/** What a client sees of an endpoint: what is stored joined with what the Matter network knows. */
+export interface EndpointState {
+    readonly id: EndpointId;
+    readonly nodeId: NodeId;
+
+    /** The Matter device type id. */
+    readonly deviceType: number;
+    readonly name: string;
+    readonly roomId: RoomId | null;
+    readonly clusters: readonly ClusterState[];
+}
+
 /** The value of an attribute or the fields of a command. */
 export type AttributeValue = WireValue;
 
@@ -28,15 +51,4 @@ export interface EndpointShape {
     /** The Matter device type id. */
     readonly deviceType: number;
     readonly clusters: readonly ClusterState[];
-}
-
-/** What is stored for an endpoint. */
-export interface EndpointRecord {
-    readonly id: EndpointId;
-    readonly nodeId: NodeId;
-
-    /** The Matter endpoint number, unique within its node. */
-    readonly matterNumber: number;
-    readonly name: string;
-    readonly roomId: RoomId | null;
 }

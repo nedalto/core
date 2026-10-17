@@ -132,6 +132,30 @@ The event of a write is sent before the response to the request that made it, al
 
 A connection that subscribes again gets a new snapshot, and goes on receiving each event once.
 
+### Nodes, endpoints and rooms
+
+`node:added` carries the node with its endpoints, and it is sent before the response to `node.commission`: a client has the node and its endpoints by the time it learns the node's id.
+
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant H as Hub
+    C->>H: node.commission
+    H-->>C: notification: node:added
+    H-->>C: response: the id of the node
+```
+
+An endpoint has no removal event of its own.
+With `node:removed`, the client discards the endpoints of that node.
+
+An endpoint does not get `endpoint:room-changed` when its room is removed.
+With `room:removed`, the client sets to `null` the `roomId` of the endpoints that were in that room.
+
+An event can name a node or an endpoint the client does not know, when a commissioning failed after the device joined the fabric; the client ignores it.
+
+`reachable: false` does not mean that the node is gone, only that it does not answer now.
+A node stays in `node.list` and in the snapshot, with `reachable: false`, until `node:removed`.
+
 ## Versioning
 
 `SCHEMA_VERSION`, in the contract, is the version of this protocol.

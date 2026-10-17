@@ -5,14 +5,18 @@ import { connect as connectSocket, type Socket } from "node:net";
 import { describe, test } from "node:test";
 
 import { InternalError } from "@nedalto/contract/common/errors.ts";
-import { createRoomId, isUuidV7, type RoomId } from "@nedalto/contract/common/ids.ts";
+import { createEndpointId, createNodeId, createRoomId, isUuidV7, type RoomId } from "@nedalto/contract/common/ids.ts";
+import {
+    AttributeNotFoundError,
+    CommandNotFoundError,
+    InteractionRejectedError,
+} from "@nedalto/contract/endpoint/errors.ts";
+import { CommissioningFailedError, NodeUnreachableError } from "@nedalto/contract/node/errors.ts";
 import { JsonRpcErrorCode, HandshakeCloseCode } from "@nedalto/contract/server/types.ts";
 
 import { createHttpServer } from "../src/server.ts";
-import { RecordingBus } from "./helpers/bus.ts";
-import { RecordingLogger } from "./helpers/logger.ts";
-import { MemoryRoomRepository } from "./helpers/repository.ts";
-import { startServer, TOKEN } from "./helpers/server.ts";
+import { createLight, createNode, LIGHT_SHAPE, stateOf } from "./helpers/fixtures.ts";
+import { createFakes, startServer, TOKEN } from "./helpers/server.ts";
 
 const KITCHEN = { id: createRoomId(), name: "Kitchen" };
 
@@ -423,16 +427,309 @@ describe("HttpServer", () => {
         assert.equal(roomRepository.records.size, 1);
     });
 
+    test("node.list returns the nodes with whether each is reachable", async (context) => {
+        const { connect, nodeRepository, nodeGateway } = await startServer(context);
+        const online = createNode();
+        const offline = createNode();
+        nodeRepository.save(online);
+        nodeRepository.save(offline);
+        nodeGateway.reachable.add(online.id);
+        const client = await connect();
+
+        assert.deepEqual((await client.call("node.list")).result, [
+            { id: online.id, reachable: true },
+            { id: offline.id, reachable: false },
+        ]);
+    });
+
+    test("node.get returns the node, and answers NOT_FOUND_ERROR, naming the node, when it does not exist", async (context) => {
+        const { connect, nodeRepository } = await startServer(context);
+        const node = createNode();
+        nodeRepository.save(node);
+        const client = await connect();
+        const missing = createNodeId();
+
+        const found = await client.call("node.get", { id: node.id });
+        const notFound = await client.call("node.get", { id: missing });
+
+        assert.deepEqual(found.result, { id: node.id, reachable: false });
+        assert.partialDeepStrictEqual(notFound.error, { data: { code: "NOT_FOUND_ERROR", nodeId: missing } });
+    });
+
+    test("node.getInfo returns what the node reports, its 64-bit Matter id exact, and answers NOT_FOUND_ERROR for an unknown node", async (context) => {
+        const { connect, nodeGateway } = await startServer(context);
+        const node = createNode();
+        const info = {
+            id: node.id,
+            matterId: 18446744073709551615n,
+            commissionedAt: 1_000,
+            label: "Bedside",
+            vendorName: "Acme",
+            productName: "Bulb",
+            vendorId: 1,
+            productId: 2,
+            hardwareVersion: 3,
+            softwareVersion: 4,
+            softwareVersionString: "1.0.0",
+        };
+        nodeGateway.infos.set(node.id, info);
+        const client = await connect();
+        const missing = createNodeId();
+
+        const found = await client.call("node.getInfo", { id: node.id });
+        const notFound = await client.call("node.getInfo", { id: missing });
+
+        assert.deepEqual(found.result, info);
+        assert.partialDeepStrictEqual(notFound.error, { data: { code: "NOT_FOUND_ERROR", nodeId: missing } });
+    });
+
+    test("node.commission stores the node and its endpoints and returns the id of the node", async (context) => {
+        const { connect, nodeRepository, endpointRepository, nodeGateway, endpointGateway } =
+            await startServer(context);
+        const node = createNode();
+        const light = createLight(node.id, 1);
+        nodeGateway.commissioned = { node, endpoints: [light] };
+        endpointGateway.shapes.set(light.id, LIGHT_SHAPE);
+        const client = await connect();
+
+        const response = await client.call("node.commission", { setupCode: "34970112332" });
+
+        assert.equal(response.result, node.id);
+        assert.deepEqual(nodeGateway.commissionCalls, ["34970112332"]);
+        assert.deepEqual([...nodeRepository.records.values()], [node]);
+        assert.deepEqual([...endpointRepository.records.values()], [light]);
+    });
+
+    test("node.commission answers the error of the gateway, and stores nothing, when the device cannot be commissioned", async (context) => {
+        const { connect, nodeRepository, nodeGateway } = await startServer(context);
+        nodeGateway.commissionFailure = new CommissioningFailedError("not-found", new Error("no device"));
+        const client = await connect();
+
+        const response = await client.call("node.commission", { setupCode: "34970112332" });
+
+        assert.partialDeepStrictEqual(response.error, {
+            code: JsonRpcErrorCode.ApplicationError,
+            data: { code: "INTEGRATION_ERROR", reason: "not-found" },
+        });
+        assert.equal(nodeRepository.records.size, 0);
+    });
+
+    test("node.decommission removes the node and returns null, and passes force on", async (context) => {
+        const { connect, nodeRepository, nodeGateway } = await startServer(context);
+        const node = createNode();
+        nodeRepository.save(node);
+        const client = await connect();
+
+        const response = await client.call("node.decommission", { id: node.id, force: true });
+
+        assert.equal(response.result, null);
+        assert.deepEqual(nodeGateway.decommissionCalls, [{ nodeId: node.id, force: true }]);
+        assert.equal(nodeRepository.records.size, 0);
+    });
+
+    test("node.decommission answers NOT_FOUND_ERROR when the node does not exist, and UNREACHABLE_ERROR, keeping the node, when it does not answer", async (context) => {
+        const { connect, nodeRepository, nodeGateway } = await startServer(context);
+        const node = createNode();
+        nodeRepository.save(node);
+        nodeGateway.decommissionFailure = new NodeUnreachableError(node.id, "offline", new Error("no answer"));
+        const client = await connect();
+        const missing = createNodeId();
+
+        const notFound = await client.call("node.decommission", { id: missing });
+        const unreachable = await client.call("node.decommission", { id: node.id });
+
+        assert.partialDeepStrictEqual(notFound.error, { data: { code: "NOT_FOUND_ERROR", nodeId: missing } });
+        assert.partialDeepStrictEqual(unreachable.error, {
+            data: { code: "UNREACHABLE_ERROR", nodeId: node.id, reason: "offline" },
+        });
+        assert.equal(nodeRepository.records.size, 1);
+    });
+
+    test("endpoint.list returns the endpoints, and leaves out one the gateway cannot describe", async (context) => {
+        const { connect, endpointRepository, endpointGateway, logger } = await startServer(context);
+        const node = createNode();
+        const described = createLight(node.id, 1);
+        const shapeless = createLight(node.id, 2);
+        endpointRepository.save(described);
+        endpointRepository.save(shapeless);
+        endpointGateway.shapes.set(described.id, LIGHT_SHAPE);
+        const client = await connect();
+
+        assert.deepEqual((await client.call("endpoint.list")).result, [stateOf(described)]);
+        assert.equal(logger.at("warn").length, 1);
+    });
+
+    test("endpoint.get returns the endpoint, and answers NOT_FOUND_ERROR, naming the endpoint, when it does not exist or cannot be described", async (context) => {
+        const { connect, endpointRepository, endpointGateway } = await startServer(context);
+        const node = createNode();
+        const described = createLight(node.id, 1);
+        const shapeless = createLight(node.id, 2);
+        endpointRepository.save(described);
+        endpointRepository.save(shapeless);
+        endpointGateway.shapes.set(described.id, LIGHT_SHAPE);
+        const client = await connect();
+        const missing = createEndpointId();
+
+        const found = await client.call("endpoint.get", { id: described.id });
+        const notFound = await Promise.all(
+            [missing, shapeless.id].map((id) => client.call("endpoint.get", { id }).then((response) => response.error)),
+        );
+
+        assert.deepEqual(found.result, stateOf(described));
+        assert.partialDeepStrictEqual(notFound, [
+            { data: { code: "NOT_FOUND_ERROR", endpointId: missing } },
+            { data: { code: "NOT_FOUND_ERROR", endpointId: shapeless.id } },
+        ]);
+    });
+
+    test("endpoint.read returns what the gateway reads, and answers its error when the device does not serve the attribute", async (context) => {
+        const { connect, endpointGateway } = await startServer(context);
+        const id = createEndpointId();
+        endpointGateway.readValue = { level: 200 };
+        const client = await connect();
+
+        const read = await client.call("endpoint.read", { id, clusterId: 8, attributeId: 0 });
+        endpointGateway.interactionFailure = new AttributeNotFoundError(id, 8, 0);
+        const failed = await client.call("endpoint.read", { id, clusterId: 8, attributeId: 0 });
+
+        assert.deepEqual(read.result, { level: 200 });
+        assert.deepEqual(endpointGateway.reads[0], { endpointId: id, clusterId: 8, attributeId: 0 });
+        assert.partialDeepStrictEqual(failed.error, {
+            data: { code: "NOT_FOUND_ERROR", endpointId: id, clusterId: 8, attributeId: 0 },
+        });
+    });
+
+    test("endpoint.write hands the value to the gateway, an integer beyond 2^53 exact, and returns null", async (context) => {
+        const { connect, endpointGateway } = await startServer(context);
+        const id = createEndpointId();
+        const client = await connect();
+
+        client.ws.send(
+            `{"jsonrpc":"2.0","method":"endpoint.write","params":{"id":"${id}","clusterId":6,"attributeId":0,"value":{"count":12345678901234567890}},"id":"write"}`,
+        );
+        const response = await client.inbox.next();
+
+        assert.equal(response.result, null);
+        assert.deepEqual(endpointGateway.writes, [
+            { endpointId: id, clusterId: 6, attributeId: 0, value: { count: 12345678901234567890n } },
+        ]);
+    });
+
+    test("endpoint.write answers its error when the device rejects the write", async (context) => {
+        const { connect, endpointGateway } = await startServer(context);
+        const id = createEndpointId();
+        endpointGateway.interactionFailure = new InteractionRejectedError(id, 6, { attributeId: 0 }, 0x88);
+        const client = await connect();
+
+        const response = await client.call("endpoint.write", { id, clusterId: 6, attributeId: 0, value: true });
+
+        assert.partialDeepStrictEqual(response.error, {
+            data: { code: "INTEGRATION_ERROR", endpointId: id, status: 0x88 },
+        });
+    });
+
+    test("endpoint.write and endpoint.invoke answer invalid params, and reach no device, when the value or the arguments have a key that starts with $ at any depth", async (context) => {
+        const { connect, endpointGateway } = await startServer(context);
+        const id = createEndpointId();
+        const client = await connect();
+        const nested = { levels: [{ target: { $bytes: "00" } }] };
+
+        const write = await client.call("endpoint.write", { id, clusterId: 6, attributeId: 0, value: nested });
+        const invoke = await client.call("endpoint.invoke", { id, clusterId: 6, commandId: 0, args: nested });
+
+        for (const response of [write, invoke]) {
+            assert.partialDeepStrictEqual(response.error, {
+                code: JsonRpcErrorCode.InvalidParams,
+                data: { code: "VALIDATION_ERROR" },
+            });
+        }
+        assert.deepEqual(endpointGateway.writes, []);
+        assert.deepEqual(endpointGateway.invocations, []);
+    });
+
+    test("endpoint.invoke hands the command to the gateway, with or without arguments, and returns null", async (context) => {
+        const { connect, endpointGateway } = await startServer(context);
+        const id = createEndpointId();
+        const client = await connect();
+
+        const withArgs = await client.call("endpoint.invoke", { id, clusterId: 8, commandId: 0, args: { level: 100 } });
+        const without = await client.call("endpoint.invoke", { id, clusterId: 6, commandId: 1 });
+
+        assert.deepEqual([withArgs.result, without.result], [null, null]);
+        assert.deepEqual(endpointGateway.invocations, [
+            { endpointId: id, clusterId: 8, commandId: 0, args: { level: 100 } },
+            { endpointId: id, clusterId: 6, commandId: 1, args: undefined },
+        ]);
+    });
+
+    test("endpoint.invoke answers its error when the device does not have the command", async (context) => {
+        const { connect, endpointGateway } = await startServer(context);
+        const id = createEndpointId();
+        endpointGateway.interactionFailure = new CommandNotFoundError(id, 6, 99);
+        const client = await connect();
+
+        const response = await client.call("endpoint.invoke", { id, clusterId: 6, commandId: 99 });
+
+        assert.partialDeepStrictEqual(response.error, {
+            data: { code: "NOT_FOUND_ERROR", endpointId: id, clusterId: 6, commandId: 99 },
+        });
+    });
+
+    test("endpoint.setName renames the endpoint and returns null, and answers NOT_FOUND_ERROR when it does not exist", async (context) => {
+        const { connect, endpointRepository } = await startServer(context);
+        const light = createLight(createNode().id, 1);
+        endpointRepository.save(light);
+        const client = await connect();
+        const missing = createEndpointId();
+
+        const renamed = await client.call("endpoint.setName", { id: light.id, name: "Lamp" });
+        const notFound = await client.call("endpoint.setName", { id: missing, name: "Lamp" });
+
+        assert.equal(renamed.result, null);
+        assert.equal(endpointRepository.records.get(light.id)?.name, "Lamp");
+        assert.partialDeepStrictEqual(notFound.error, { data: { code: "NOT_FOUND_ERROR", endpointId: missing } });
+    });
+
+    test("endpoint.setRoom assigns the room, and clears it with null, and returns null", async (context) => {
+        const { connect, endpointRepository, roomRepository } = await startServer(context);
+        const light = createLight(createNode().id, 1);
+        endpointRepository.save(light);
+        roomRepository.save(KITCHEN);
+        const client = await connect();
+
+        const assigned = await client.call("endpoint.setRoom", { id: light.id, roomId: KITCHEN.id });
+        const roomAfterAssign = endpointRepository.records.get(light.id)?.roomId;
+        const cleared = await client.call("endpoint.setRoom", { id: light.id, roomId: null });
+
+        assert.deepEqual([assigned.result, cleared.result], [null, null]);
+        assert.equal(roomAfterAssign, KITCHEN.id);
+        assert.equal(endpointRepository.records.get(light.id)?.roomId, null);
+    });
+
+    test("endpoint.setRoom answers NOT_FOUND_ERROR, naming the room, and changes nothing, when the room does not exist", async (context) => {
+        const { connect, endpointRepository, bus } = await startServer(context);
+        const light = createLight(createNode().id, 1);
+        endpointRepository.save(light);
+        const client = await connect();
+        const roomId = createRoomId();
+
+        const response = await client.call("endpoint.setRoom", { id: light.id, roomId });
+
+        assert.partialDeepStrictEqual(response.error, {
+            code: JsonRpcErrorCode.ApplicationError,
+            data: { code: "NOT_FOUND_ERROR", roomId },
+        });
+        assert.equal(endpointRepository.records.get(light.id)?.roomId, null);
+        assert.deepEqual(bus.emitted, []);
+    });
+
     test("rejects when the port is in use, instead of never settling", async (context) => {
         const occupied: Server = createServer();
         await new Promise<void>((resolve) => occupied.listen(0, "127.0.0.1", resolve));
         context.after(() => new Promise<void>((resolve) => occupied.close(() => resolve())));
         const address = occupied.address();
         assert.ok(typeof address === "object" && address !== null);
-        const server = createHttpServer(
-            { logger: new RecordingLogger(), bus: new RecordingBus(), roomRepository: new MemoryRoomRepository() },
-            { host: "127.0.0.1", port: address.port, authToken: TOKEN },
-        );
+        const server = createHttpServer(createFakes(), { host: "127.0.0.1", port: address.port, authToken: TOKEN });
 
         await assert.rejects(server.start(), { code: "EADDRINUSE" });
     });
@@ -447,10 +744,7 @@ describe("HttpServer", () => {
     });
 
     test("does nothing when the server was never started", async () => {
-        const server = createHttpServer(
-            { logger: new RecordingLogger(), bus: new RecordingBus(), roomRepository: new MemoryRoomRepository() },
-            { host: "127.0.0.1", port: 0, authToken: TOKEN },
-        );
+        const server = createHttpServer(createFakes(), { host: "127.0.0.1", port: 0, authToken: TOKEN });
 
         await server.stop();
     });
