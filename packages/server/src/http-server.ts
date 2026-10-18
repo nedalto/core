@@ -103,10 +103,11 @@ export class HttpServer implements Lifecycle {
             server.listen(this.#port, this.#host, resolve);
         });
 
+        server.on("error", (error) => this.#logger.error("server error", error));
         server.on("upgrade", (request, socket, head) => {
             wss.handleUpgrade(request, socket, head, (ws) => this.#onConnection(ws, request));
         });
-        server.on("error", (error) => this.#logger.error("server error", error));
+
         this.#heartbeat = setInterval(() => this.#pulse(wss), HEARTBEAT_MS);
         for (const eventName of EVENT_NAMES) {
             this.#unsubscribes.push(
@@ -115,6 +116,7 @@ export class HttpServer implements Lifecycle {
         }
         this.#server = server;
         this.#wss = wss;
+        this.#logger.notice("ready", this.#host, this.port);
     }
 
     async stop(): Promise<void> {
@@ -139,6 +141,7 @@ export class HttpServer implements Lifecycle {
         await new Promise<void>((resolve, reject) => {
             server.close((error) => (error === undefined ? resolve() : reject(error)));
         });
+        this.#logger.notice("closed");
     }
 
     #isToken(offered: string): boolean {

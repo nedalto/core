@@ -29,16 +29,16 @@ describe("createLogger", () => {
     test("writes a line with the level, facility and values", () => {
         const sink = new MemorySink();
 
-        createLogger(sink, LogLevel.Debug).info("hello", "world");
+        createLogger(sink, LogLevel.Debug, "App").info("hello", "world");
 
-        assert.match(sink.only, / INFO Hub hello world\n$/);
+        assert.match(sink.only, / INFO App hello world\n$/);
     });
 
     test("starts the line with the local time, zero-padded", (context) => {
         const sink = new MemorySink();
         context.mock.timers.enable({ apis: ["Date"], now: new Date(2026, 0, 2, 3, 4, 5, 6) });
 
-        createLogger(sink, LogLevel.Info).info("hello");
+        createLogger(sink, LogLevel.Info, "App").info("hello");
 
         assert.ok(sink.only.startsWith("2026-01-02 03:04:05.006 INFO"));
     });
@@ -46,22 +46,14 @@ describe("createLogger", () => {
     test("ends the line at the facility when called without values", () => {
         const sink = new MemorySink();
 
-        createLogger(sink, LogLevel.Info).info();
+        createLogger(sink, LogLevel.Info, "App").info();
 
-        assert.match(sink.only, / INFO Hub\n$/);
-    });
-
-    test("writes under the given facility", () => {
-        const sink = new MemorySink();
-
-        createLogger(sink, LogLevel.Info, "Matter").info("hello");
-
-        assert.match(sink.only, / INFO Matter hello\n$/);
+        assert.match(sink.only, / INFO App\n$/);
     });
 
     test("drops the calls below the level and writes the rest", () => {
         const sink = new MemorySink();
-        const logger = createLogger(sink, LogLevel.Warn);
+        const logger = createLogger(sink, LogLevel.Warn, "App");
 
         logger.debug("dropped");
         logger.info("dropped");
@@ -79,15 +71,15 @@ describe("createLogger", () => {
     test("renders values other than strings with inspect", () => {
         const sink = new MemorySink();
 
-        createLogger(sink, LogLevel.Info).info("count:", 42, { key: "value" });
+        createLogger(sink, LogLevel.Info, "App").info("count:", 42, { key: "value" });
 
-        assert.match(sink.only, / INFO Hub count: 42 \{ key: 'value' \}\n$/);
+        assert.match(sink.only, / INFO App count: 42 \{ key: 'value' \}\n$/);
     });
 
     test("renders an Error with its stack", () => {
         const sink = new MemorySink();
 
-        createLogger(sink, LogLevel.Info).error(new Error("boom"));
+        createLogger(sink, LogLevel.Info, "App").error(new Error("boom"));
 
         assert.match(sink.only, /Error: boom\n\s+at /);
     });
@@ -101,18 +93,18 @@ describe("createLogger", () => {
         };
 
         const written = await captureStderr(() => {
-            createLogger(sink, LogLevel.Info).info("message", unrenderable);
+            createLogger(sink, LogLevel.Info, "App").info("message", unrenderable);
         });
 
         assert.equal(sink.lines.length, 0);
         assert.equal(written.length, 1);
-        assert.match(written[0] ?? "", /INFO Hub/);
+        assert.match(written[0] ?? "", /INFO App/);
     });
 
     test("get() keeps the destination and the level and replaces the facility", () => {
         const sink = new MemorySink();
 
-        const child = createLogger(sink, LogLevel.Error).get("Outer").get("Inner");
+        const child = createLogger(sink, LogLevel.Error, "App").get("Outer").get("Inner");
         child.warn("dropped");
         child.error("written");
 

@@ -45,8 +45,8 @@ class RotatingLogFile implements LogFile {
         // the stream with an `error` and never emits `open`. Rejecting on it fails the start
         // instead of leaving the promise pending.
         await new Promise<void>((resolve, reject) => {
-            stream.once("open", () => resolve());
             stream.once("error", reject);
+            stream.once("open", () => resolve());
         });
 
         // Later failures go to stderr: losing log lines beats stopping the hub.

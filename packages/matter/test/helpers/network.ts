@@ -22,7 +22,7 @@ import { type ClientNode, ControllerBehavior, Endpoint, ServerNode } from "@matt
 import type { EndpointRecord } from "@nedalto/contract/endpoint/types.ts";
 import type { NodeRecord } from "@nedalto/contract/node/types.ts";
 
-import { SdkMatterController } from "../../src/controller.ts";
+import { MatterController } from "../../src/controller.ts";
 import { RecordingBus } from "./bus.ts";
 import { defer } from "./cleanup.ts";
 import { RecordingLogger } from "./logger.ts";
@@ -38,7 +38,7 @@ export interface TestDevice {
 }
 
 export interface TestController {
-    readonly controller: SdkMatterController;
+    readonly controller: MatterController;
     readonly bus: RecordingBus;
     readonly logger: RecordingLogger;
     readonly nodeRepository: MemoryNodeRepository;
@@ -49,7 +49,7 @@ export interface TestController {
 export class TestNetwork {
     readonly #context: TestContext;
     readonly #simulator = new NetworkSimulator();
-    readonly #controllers: SdkMatterController[] = [];
+    readonly #controllers: MatterController[] = [];
     readonly #peerServers: ServerNode[] = [];
     #hosts = 0;
 
@@ -83,7 +83,7 @@ export class TestNetwork {
         const logger = new RecordingLogger();
         const nodeRepository = new MemoryNodeRepository();
         const endpointRepository = new MemoryEndpointRepository();
-        const controller = new SdkMatterController(environment, { logger, nodeRepository, endpointRepository, bus });
+        const controller = new MatterController(environment, { logger, nodeRepository, endpointRepository, bus });
         this.#controllers.push(controller);
         return { controller, bus, logger, nodeRepository, endpointRepository };
     }

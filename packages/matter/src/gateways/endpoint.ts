@@ -4,7 +4,7 @@ import { type ClientNode, ClusterBehavior, type Endpoint } from "@matter/main/no
 import { Invoke, Read, Write, type WriteResult } from "@matter/main/protocol";
 import { AttributeId, ClusterId, CommandId, EndpointNumber, Status, TlvOfModel } from "@matter/main/types";
 
-import { IntegrationError, ValidationError } from "@nedalto/contract/common/errors.ts";
+import { IntegrationError, ValidationError, type ValidationIssue } from "@nedalto/contract/common/errors.ts";
 import type { EndpointId } from "@nedalto/contract/common/ids.ts";
 import {
     AttributeNotFoundError,
@@ -15,20 +15,19 @@ import type { EndpointGateway } from "@nedalto/contract/endpoint/ports.ts";
 import type { AttributeState, AttributeValue, ClusterState, EndpointShape } from "@nedalto/contract/endpoint/types.ts";
 import type { DomainEventBus } from "@nedalto/contract/events.ts";
 
+import { classifyAttributeStatus, classifyCommandStatus, classifyInteractionError } from "../classify.ts";
 import { findSpecAttribute, findSpecCommand } from "../clusters.ts";
-import { classifyAttributeStatus, classifyCommandStatus, classifyInteractionError } from "../errors.ts";
 import type { Identity, TrackedNode } from "../identity.ts";
 import { normalizeValue } from "../normalize.ts";
 
-type Path = "clusterId" | "attributeId" | "commandId" | "value" | "args";
+type Issue = ValidationIssue & { readonly path: "clusterId" | "attributeId" | "commandId" | "value" | "args" };
 
-/** A `ValidationError` in the shape that schema validation gives its issues. */
-const invalid = (issues: readonly { path: Path; message: string }[], cause?: unknown): ValidationError =>
-    new ValidationError("Invalid input", { cause, data: { issues } });
+const invalid = (issues: readonly Issue[], cause?: unknown): ValidationError =>
+    new ValidationError("Invalid input", { cause, issues });
 
 /** Throws a `ValidationError` for each of the ids that Matter has no way to address. */
 function assertAddressable(clusterId: number, element: { path: "attributeId" | "commandId"; id: number }): void {
-    const issues: { path: Path; message: string }[] = [];
+    const issues: Issue[] = [];
     if (!ClusterId.isValid(clusterId)) {
         issues.push({ path: "clusterId", message: "clusterId is not a Matter cluster id" });
     }
@@ -62,7 +61,7 @@ const clusterBehaviors = (endpoint: Endpoint): ClusterBehavior.Type[] =>
     Object.values(endpoint.behaviors.supported).filter(ClusterBehavior.is);
 
 /** The `EndpointGateway` over the peers of the controller node. */
-export class SdkEndpointGateway implements EndpointGateway {
+export class MatterEndpointGateway implements EndpointGateway {
     readonly #bus: DomainEventBus;
     readonly #identity: Identity;
     readonly #unobserve: () => void;

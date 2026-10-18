@@ -12,23 +12,22 @@ import { NodeNotFoundError } from "@nedalto/contract/node/errors.ts";
 import type { NodeGateway } from "@nedalto/contract/node/ports.ts";
 import type { CommissioningResult, NodeInfo } from "@nedalto/contract/node/types.ts";
 
-import { classifyCommissioningError, classifyDecommissioningError } from "../errors.ts";
+import { classifyCommissioningError, classifyDecommissioningError } from "../classify.ts";
 import type { Identity } from "../identity.ts";
 
 const QR_PREFIX = "MT:";
 
-/** A `ValidationError` about the setup code, in the shape that schema validation gives its issues. */
 const invalidSetupCode = (message: string, cause?: unknown): ValidationError =>
     new ValidationError(`Setup code ${message}`, {
         cause,
-        data: { issues: [{ path: "setupCode", message: `setupCode ${message}` }] },
+        issues: [{ path: "setupCode", message: `setupCode ${message}` }],
     });
 
 /** A trimmed `value`, or `undefined` when it is blank. */
 const nonBlank = (value: string | undefined): string | undefined => value?.trim() || undefined;
 
 /** The `NodeGateway` over the peers of the controller node. */
-export class SdkNodeGateway implements NodeGateway {
+export class MatterNodeGateway implements NodeGateway {
     readonly #logger: Logger;
     readonly #bus: DomainEventBus;
     readonly #identity: Identity;

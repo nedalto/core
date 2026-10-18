@@ -80,9 +80,9 @@ class PlainLogger implements Logger {
 }
 
 /**
- * The application `Logger`, writing `YYYY-MM-DD HH:mm:ss.SSS LEVEL Facility values…` lines in
+ * The application `Logger` for `facility`, writing `YYYY-MM-DD HH:mm:ss.SSS LEVEL Facility values…` lines in
  * local time to `stream`, which the caller owns. Strings are written as they are and any other
  * value through `util.inspect`.
  */
-export const createLogger = (stream: Writable, level: LogLevel, facility: string = "Hub"): Logger =>
+export const createLogger = (stream: Writable, level: LogLevel, facility: string): Logger =>
     new PlainLogger(stream, SEVERITY[level], facility);

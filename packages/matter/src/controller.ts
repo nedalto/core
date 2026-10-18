@@ -9,21 +9,21 @@ import type { DomainEventBus } from "@nedalto/contract/events.ts";
 import type { Logger } from "@nedalto/contract/logger/ports.ts";
 import type { NodeGateway, NodeRepository } from "@nedalto/contract/node/ports.ts";
 
-import { SdkEndpointGateway } from "./gateways/endpoint.ts";
-import { SdkNodeGateway } from "./gateways/node.ts";
+import { MatterEndpointGateway } from "./gateways/endpoint.ts";
+import { MatterNodeGateway } from "./gateways/node.ts";
 import { Identity } from "./identity.ts";
 
 /**
  * The Matter controller of the hub.
  * `node` and `endpoint` are available between `start()` and `stop()`.
  */
-export interface MatterController extends Lifecycle {
+export interface Controller extends Lifecycle {
     readonly node: NodeGateway;
     readonly endpoint: EndpointGateway;
 }
 
 /** What the controller reads, writes and reports through. */
-export interface ControllerDeps {
+export interface MatterControllerDeps {
     readonly logger: Logger;
     readonly nodeRepository: NodeRepository;
     readonly endpointRepository: EndpointRepository;
@@ -48,11 +48,11 @@ const BASIC_INFORMATION = {
 
 interface Open {
     readonly server: ServerNode;
-    readonly node: SdkNodeGateway;
-    readonly endpoint: SdkEndpointGateway;
+    readonly node: MatterNodeGateway;
+    readonly endpoint: MatterEndpointGateway;
 }
 
-export class SdkMatterController implements MatterController {
+export class MatterController implements Controller {
     readonly #environment: Environment;
     readonly #logger: Logger;
     readonly #nodeRepository: NodeRepository;
@@ -61,9 +61,9 @@ export class SdkMatterController implements MatterController {
     #open: Open | undefined;
 
     /** The controller runs on `environment`, which the caller has already configured. */
-    constructor(environment: Environment, { logger, nodeRepository, endpointRepository, bus }: ControllerDeps) {
+    constructor(environment: Environment, { logger, nodeRepository, endpointRepository, bus }: MatterControllerDeps) {
         this.#environment = environment;
-        this.#logger = logger.get("Matter");
+        this.#logger = logger;
         this.#nodeRepository = nodeRepository;
         this.#endpointRepository = endpointRepository;
         this.#bus = bus;
@@ -90,11 +90,11 @@ export class SdkMatterController implements MatterController {
             controller: { adminFabricLabel: BASIC_INFORMATION.vendorName },
         });
         const identity = new Identity(this.#logger);
-        const node = new SdkNodeGateway(this.#logger, this.#bus, identity, server);
-        const endpoint = new SdkEndpointGateway(this.#bus, identity);
+        const node = new MatterNodeGateway(this.#logger, this.#bus, identity, server);
+        const endpoint = new MatterEndpointGateway(this.#bus, identity);
         // @matter/node 0.17.9: the peers are read from storage on first access and start connecting when the
         // server goes online, so hydrating before `start()` attaches the observers before any connection.
-        identity.hydrate(server.peers, this.#nodeRepository.findAll(), this.#endpointRepository);
+        identity.hydrate(server.peers, this.#nodeRepository, this.#endpointRepository);
         await server.start();
         this.#open = { server, node, endpoint };
         this.#logger.notice("controller ready");

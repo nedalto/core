@@ -62,3 +62,4 @@ The end-to-end suite runs separately and needs IPv6, which Matter requires:
 - A package's `exports` lists only the modules `apps/hub` imports; `packages/contract` alone exports every module.
 - Collaborators passed as one object have a `…Deps` type and are destructured in the signature.
 - A standalone function is an arrow when its body is a single expression and a `function` declaration otherwise; functions held in object properties and inline callbacks are arrows.
+- A package's factory scopes the logger with `get`; its classes receive the logger they write to.

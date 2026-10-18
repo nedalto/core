@@ -23,7 +23,8 @@ export function loadConfig(filePath: string): Config {
     try {
         parsed = JSON.parse(contents);
     } catch (error) {
-        throw new ValidationError(`Config file ${filePath} is not valid JSON`, { cause: error, data: { filePath } });
+        const message = `Config file ${filePath} is not valid JSON`;
+        throw new ValidationError(message, { cause: error, issues: [{ path: null, message }] });
     }
 
     return validateConfig(parsed);

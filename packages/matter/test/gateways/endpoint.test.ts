@@ -58,7 +58,7 @@ const issuePaths = (error: unknown): unknown[] | undefined => {
     });
 };
 
-describe("SdkEndpointGateway", () => {
+describe("MatterEndpointGateway", () => {
     const unknownEndpointCases: { name: string; call: (gateway: EndpointGateway, id: EndpointId) => unknown }[] = [
         { name: "read", call: (gateway, id) => gateway.read(id, ON_OFF, ON_OFF_ATTRIBUTE) },
         { name: "write", call: (gateway, id) => gateway.write(id, ON_OFF, ON_TIME_ATTRIBUTE, 30) },

@@ -11,7 +11,7 @@ import {
     PeerUnreachableError,
     TransientPeerCommunicationError,
 } from "@matter/main/protocol";
-import { FabricIndex, NodeId as MatterNodeId, Status } from "@matter/main/types";
+import { FabricIndex, NodeId as SdkNodeId, Status } from "@matter/main/types";
 
 import { type AppError, IntegrationError } from "@nedalto/contract/common/errors.ts";
 import { createEndpointId, createNodeId } from "@nedalto/contract/common/ids.ts";
@@ -33,7 +33,7 @@ import {
     classifyInteractionError,
     classifyAttributeStatus,
     classifyCommandStatus,
-} from "../src/errors.ts";
+} from "../src/classify.ts";
 
 const expectClassified = (
     actual: AppError,
@@ -88,7 +88,7 @@ describe("classifyCommissioningError", () => {
 
 describe("classifyDecommissioningError", () => {
     const nodeId = createNodeId();
-    const peerAddress = PeerAddress({ fabricIndex: FabricIndex(1), nodeId: MatterNodeId(1n) });
+    const peerAddress = PeerAddress({ fabricIndex: FabricIndex(1), nodeId: SdkNodeId(1n) });
     const cases = [
         {
             sdkError: new IcdPeerAsleepError(peerAddress, Millis(1000)),
@@ -133,7 +133,7 @@ describe("classifyDecommissioningError", () => {
 describe("classifyInteractionError", () => {
     const endpointId = createEndpointId();
     const clusterId = 6;
-    const peerAddress = PeerAddress({ fabricIndex: FabricIndex(1), nodeId: MatterNodeId(1n) });
+    const peerAddress = PeerAddress({ fabricIndex: FabricIndex(1), nodeId: SdkNodeId(1n) });
     const cases = [
         {
             sdkError: new IcdPeerAsleepError(peerAddress, Millis(1000)),

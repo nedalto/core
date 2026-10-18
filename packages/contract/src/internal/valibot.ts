@@ -25,8 +25,7 @@ export const noParamsSchema = v.optional(v.strictObject<Record<string, never>>({
 export type NoParams = v.InferOutput<typeof noParamsSchema>;
 
 /**
- * Parses `input` against `schema`, or throws a `ValidationError` whose `data.issues` lists every
- * failure as `{ path, message }`. `path` is dotted (`"server.port"`) and `null` for the input itself.
+ * Parses `input` against `schema`, or throws a `ValidationError` with an issue for every failure.
  */
 export function parseOrThrow<TSchema extends v.GenericSchema>(schema: TSchema, input: unknown): v.InferOutput<TSchema> {
     const result = v.safeParse(schema, input);
@@ -34,11 +33,6 @@ export function parseOrThrow<TSchema extends v.GenericSchema>(schema: TSchema, i
         return result.output;
     }
     throw new ValidationError("Invalid input", {
-        data: {
-            issues: result.issues.map((issue) => ({
-                path: v.getDotPath(issue),
-                message: issue.message,
-            })),
-        },
+        issues: result.issues.map((issue) => ({ path: v.getDotPath(issue), message: issue.message })),
     });
 }
