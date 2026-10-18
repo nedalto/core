@@ -41,7 +41,7 @@ class SqliteDatabase implements Database {
 
     constructor(filePath: string, logger: Logger) {
         this.#filePath = filePath;
-        this.#logger = logger.get("Database");
+        this.#logger = logger;
     }
 
     get transactor(): Transactor {
@@ -124,4 +124,4 @@ class SqliteDatabase implements Database {
 
 /** A `Database` over the SQLite file at `filePath`, which is created if it does not exist. */
 export const createSqliteDatabase = (filePath: string, logger: Logger): Database =>
-    new SqliteDatabase(filePath, logger);
+    new SqliteDatabase(filePath, logger.get("Database"));

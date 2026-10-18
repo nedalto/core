@@ -17,7 +17,7 @@ const handlers = {
         throw new NotFoundError("missing", { data: { roomId: "r" } });
     },
     "test.invalid": () => {
-        throw new ValidationError("bad", { data: { issues: [] } });
+        throw new ValidationError("bad", { issues: [] });
     },
     "test.internal": () => {
         throw new InternalError("bug");

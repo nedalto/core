@@ -25,7 +25,7 @@ const isInvalidSetupCode =
         return true;
     };
 
-describe("SdkNodeGateway", () => {
+describe("MatterNodeGateway", () => {
     test("commission joins the device of a manual pairing code and returns its node and endpoint", async (t) => {
         const network = new TestNetwork(t);
         const { manualCode } = await network.startDevice();

@@ -13,7 +13,7 @@ const ON_OFF = 0x06;
 const ON_OFF_ATTRIBUTE = 0x0000;
 const ON_COMMAND = 0x01;
 
-describe("SdkMatterController", () => {
+describe("MatterController", () => {
     test("node and endpoint are available between start() and stop()", async (t) => {
         const network = new TestNetwork(t);
         const { controller } = network.controller();

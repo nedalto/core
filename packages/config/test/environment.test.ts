@@ -16,7 +16,7 @@ function assertTokenRejected(env: NodeJS.ProcessEnv): void {
         (error: unknown) => {
             assert.ok(error instanceof ValidationError, JSON.stringify(env));
             assert.equal(error.code, "VALIDATION_ERROR");
-            assert.deepEqual(error.data, { variable: "NEDALTO_AUTH_TOKEN" });
+            assert.partialDeepStrictEqual(error.data, { issues: [{ path: "NEDALTO_AUTH_TOKEN" }] });
             return true;
         },
     );

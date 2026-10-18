@@ -24,9 +24,20 @@ export abstract class AppError extends Error {
     }
 }
 
-/** The input is invalid. */
+/** A part of the input that is invalid: `path` is dotted (`"server.port"`) and `null` for the input itself. */
+export type ValidationIssue = { readonly path: string | null; readonly message: string };
+
+interface ValidationErrorOptions extends ErrorOptions {
+    issues: readonly ValidationIssue[];
+}
+
+/** The input is invalid; `data.issues` says where and why. */
 export class ValidationError extends AppError {
     readonly code = "VALIDATION_ERROR";
+
+    constructor(message: string, { issues, cause }: ValidationErrorOptions) {
+        super(message, { cause, data: { issues } });
+    }
 }
 
 /** The entity the request names does not exist. */

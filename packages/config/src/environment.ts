@@ -19,20 +19,20 @@ const TOKEN_PATTERN = /^[A-Za-z0-9!#$%&'*+.^_`|~-]+$/;
 
 const read = (env: NodeJS.ProcessEnv, name: string): string | undefined => env[name]?.trim() || undefined;
 
+const invalidToken = (message: string): ValidationError =>
+    new ValidationError(message, { issues: [{ path: TOKEN_VARIABLE, message }] });
+
 function requireAuthToken(env: NodeJS.ProcessEnv): string {
     const token = read(env, TOKEN_VARIABLE);
-    const data = { variable: TOKEN_VARIABLE };
 
     if (token === undefined) {
-        throw new ValidationError("Auth token must not be empty", { data });
+        throw invalidToken("Auth token must not be empty");
     }
     if (token.length < TOKEN_MIN_LENGTH) {
-        throw new ValidationError(`Auth token must be at least ${TOKEN_MIN_LENGTH} characters`, { data });
+        throw invalidToken(`Auth token must be at least ${TOKEN_MIN_LENGTH} characters`);
     }
     if (!TOKEN_PATTERN.test(token)) {
-        throw new ValidationError("Auth token may only contain letters, digits, and - _ . ~ ! # $ % & ' * + ^ | `", {
-            data,
-        });
+        throw invalidToken("Auth token may only contain letters, digits, and -_.~!#$%&'*+^|`");
     }
 
     return token;

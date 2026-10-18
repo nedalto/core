@@ -58,7 +58,8 @@ describe("loadConfig", () => {
             (error: unknown) => {
                 assert.ok(error instanceof ValidationError);
                 assert.equal(error.code, "VALIDATION_ERROR");
-                assert.deepEqual(error.data, { filePath });
+                assert.partialDeepStrictEqual(error.data, { issues: [{ path: null }] });
+                assert.ok(error.message.includes(filePath));
                 assert.ok(error.cause instanceof SyntaxError);
                 return true;
             },

@@ -7,7 +7,7 @@ import type { EndpointId, NodeId } from "@nedalto/contract/common/ids.ts";
 import type { EndpointRepository } from "@nedalto/contract/endpoint/ports.ts";
 import type { EndpointRecord } from "@nedalto/contract/endpoint/types.ts";
 import type { Logger } from "@nedalto/contract/logger/ports.ts";
-import type { NodeRecord } from "@nedalto/contract/node/types.ts";
+import type { NodeRepository } from "@nedalto/contract/node/ports.ts";
 
 /** An endpoint of an SDK node, by its Matter endpoint number. */
 export interface PeerEndpoint {
@@ -106,10 +106,10 @@ export class Identity {
     }
 
     /**
-     * Registers the node of each record that has a peer in the SDK, with the endpoints of the repository that
-     * the peer still has.
+     * Registers each node of the repository that has a peer in the SDK, with the endpoints of the repository
+     * that the peer still has.
      */
-    hydrate(peers: Iterable<ClientNode>, nodes: readonly NodeRecord[], endpointRepository: EndpointRepository): void {
+    hydrate(peers: Iterable<ClientNode>, nodeRepository: NodeRepository, endpointRepository: EndpointRepository): void {
         const byMatterId = new Map<bigint, ClientNode>();
         for (const peer of peers) {
             const address = peer.state.commissioning.peerAddress;
@@ -117,7 +117,7 @@ export class Identity {
                 byMatterId.set(address.nodeId, peer);
             }
         }
-        for (const record of nodes) {
+        for (const record of nodeRepository.findAll()) {
             const peer = byMatterId.get(record.matterId);
             if (peer === undefined) {
                 // The database and the fabric disagree, e.g. after restoring one of them from a backup.

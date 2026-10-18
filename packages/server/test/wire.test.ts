@@ -79,9 +79,7 @@ describe("parseClientMessage", () => {
 
 describe("toJsonRpcError", () => {
     test("maps a ValidationError to invalid params, with its data and its code", () => {
-        const error = new ValidationError("Invalid input", {
-            data: { issues: [{ path: "name", message: "too long" }] },
-        });
+        const error = new ValidationError("Invalid input", { issues: [{ path: "name", message: "too long" }] });
 
         assert.deepEqual(toJsonRpcError(error), {
             code: JsonRpcErrorCode.InvalidParams,
@@ -137,6 +135,6 @@ describe("isUnexpected", () => {
 
     test("is false for the other AppErrors", () => {
         assert.equal(isUnexpected(new NotFoundError("no")), false);
-        assert.equal(isUnexpected(new ValidationError("no")), false);
+        assert.equal(isUnexpected(new ValidationError("no", { issues: [] })), false);
     });
 });
