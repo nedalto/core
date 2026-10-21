@@ -9,6 +9,8 @@ import { validateConfig } from "@nedalto/contract/config/schemas.ts";
 
 import { createHub } from "../src/hub.ts";
 
+const VERSION = "0.0.1";
+
 function temporaryEnvironment(context: TestContext): Environment {
     const directory = mkdtempSync(join(tmpdir(), "nedalto-hub-"));
     context.after(() => rmSync(directory, { recursive: true, force: true }));
@@ -25,7 +27,7 @@ const openDescriptors = (): number => readdirSync("/dev/fd").length;
 
 describe("createHub", () => {
     test("stop() before start() does nothing", async (context) => {
-        const hub = createHub(temporaryEnvironment(context), validateConfig({}));
+        const hub = createHub(temporaryEnvironment(context), validateConfig({}), VERSION);
 
         await assert.doesNotReject(hub.stop());
     });
@@ -36,6 +38,7 @@ describe("createHub", () => {
         const hub = createHub(
             { ...environment, storagePath: join(environment.configPath, "blocker", "storage") },
             validateConfig({}),
+            VERSION,
         );
 
         await assert.rejects(hub.start(), { code: "ENOTDIR" });
@@ -44,7 +47,7 @@ describe("createHub", () => {
     test("start() logs the error, then that it stopped, and closes the log files when the database cannot be opened", async (context) => {
         const environment = temporaryEnvironment(context);
         mkdirSync(join(environment.storagePath, "hub.db"), { recursive: true });
-        const hub = createHub(environment, validateConfig({}));
+        const hub = createHub(environment, validateConfig({}), VERSION);
         const descriptors = openDescriptors();
 
         await assert.rejects(hub.start(), { code: "ERR_SQLITE_ERROR" });

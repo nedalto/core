@@ -18,14 +18,16 @@ import { createSyncEventBus } from "./bus.ts";
 export class Hub implements Lifecycle {
     readonly #environment: Environment;
     readonly #config: Config;
+    readonly #version: string;
     // Kept apart from the services, so that they close after everything else has logged.
     readonly #logFiles: Lifecycle[] = [];
     readonly #services: Lifecycle[] = [];
     #logger: Logger | undefined;
 
-    constructor(environment: Environment, config: Config) {
+    constructor(environment: Environment, config: Config, version: string) {
         this.#environment = environment;
         this.#config = config;
+        this.#version = version;
     }
 
     async start(): Promise<void> {
@@ -76,7 +78,7 @@ export class Hub implements Lifecycle {
                     endpointRepository: database.endpoint,
                     bus,
                 },
-                { ...matterConfig, logLevel: loggerConfig.level },
+                { ...matterConfig, logLevel: loggerConfig.level, version: this.#version },
             ),
         );
         await this.#launch(
@@ -129,5 +131,6 @@ export class Hub implements Lifecycle {
     }
 }
 
-/** A `Hub` that runs with `environment` and `config`; nothing is created until `start()`. */
-export const createHub = (environment: Environment, config: Config): Hub => new Hub(environment, config);
+/** A `Hub` that runs with `environment` and `config` as `version`; nothing is created until `start()`. */
+export const createHub = (environment: Environment, config: Config, version: string): Hub =>
+    new Hub(environment, config, version);

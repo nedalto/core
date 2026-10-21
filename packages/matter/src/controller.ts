@@ -12,6 +12,7 @@ import type { NodeGateway, NodeRepository } from "@nedalto/contract/node/ports.t
 import { MatterEndpointGateway } from "./gateways/endpoint.ts";
 import { MatterNodeGateway } from "./gateways/node.ts";
 import { Identity } from "./identity.ts";
+import { softwareVersionOf } from "./version.ts";
 
 /**
  * The Matter controller of the hub.
@@ -34,16 +35,14 @@ export interface MatterControllerDeps {
 // changing it leaves an installed hub without them.
 const NODE_ID = "hub";
 
-// A test vendor id of the CSA (0xFFF1-0xFFF4). The versions are not zero because the SDK replaces a zero with
-// its own development values.
+// A test vendor id of the CSA (0xFFF1-0xFFF4). The hardware version is not zero because the SDK replaces a zero
+// with its own development values.
 const BASIC_INFORMATION = {
     vendorId: VendorId(0xfff1),
     vendorName: "Nedalto",
     productId: 0x8000,
     productName: "Hub",
     hardwareVersion: 1,
-    softwareVersion: 1,
-    softwareVersionString: "0.0.1",
 };
 
 interface Open {
@@ -58,15 +57,24 @@ export class MatterController implements Controller {
     readonly #nodeRepository: NodeRepository;
     readonly #endpointRepository: EndpointRepository;
     readonly #bus: DomainEventBus;
+    readonly #version: { readonly softwareVersion: number; readonly softwareVersionString: string };
     #open: Open | undefined;
 
-    /** The controller runs on `environment`, which the caller has already configured. */
-    constructor(environment: Environment, { logger, nodeRepository, endpointRepository, bus }: MatterControllerDeps) {
+    /**
+     * The controller runs on `environment`, which the caller has already configured, and announces itself on the
+     * fabric as `version` of the hub.
+     */
+    constructor(
+        environment: Environment,
+        { logger, nodeRepository, endpointRepository, bus }: MatterControllerDeps,
+        version: string,
+    ) {
         this.#environment = environment;
         this.#logger = logger;
         this.#nodeRepository = nodeRepository;
         this.#endpointRepository = endpointRepository;
         this.#bus = bus;
+        this.#version = { softwareVersion: softwareVersionOf(version), softwareVersionString: version };
     }
 
     get node(): NodeGateway {
@@ -84,7 +92,7 @@ export class MatterController implements Controller {
         const server = await ServerNode.create(ServerNode.RootEndpoint.with(ControllerBehavior), {
             environment: this.#environment,
             id: NODE_ID,
-            basicInformation: BASIC_INFORMATION,
+            basicInformation: { ...BASIC_INFORMATION, ...this.#version },
             commissioning: { enabled: false },
             // @matter/node 0.17.9: the label of our fabric on the devices, "matter.js" by default.
             controller: { adminFabricLabel: BASIC_INFORMATION.vendorName },

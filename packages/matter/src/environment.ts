@@ -6,7 +6,8 @@ import { Environment, LogDestination, LogFormat, Logger } from "@matter/main";
 import type { MatterConfig } from "@nedalto/contract/config/schemas.ts";
 import type { LogLevel } from "@nedalto/contract/logger/types.ts";
 
-export interface MatterOptions extends MatterConfig {
+/** What the SDK environment is configured with. */
+export interface EnvironmentOptions extends MatterConfig {
     readonly logLevel: LogLevel;
 }
 
@@ -14,7 +15,7 @@ export interface MatterOptions extends MatterConfig {
  * Points the SDK at `storagePath` and sends its log to `stream`, and returns `Environment.default`.
  * It changes process-wide state of the SDK, so only the production factory calls it.
  */
-export function configureEnvironment(storagePath: string, stream: Writable, options: MatterOptions): Environment {
+export function configureEnvironment(storagePath: string, stream: Writable, options: EnvironmentOptions): Environment {
     const environment = Environment.default;
     environment.vars.set("storage.path", storagePath);
 

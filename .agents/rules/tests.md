@@ -14,6 +14,7 @@ A test earns its place by catching a change in behavior that nothing else would 
 - Do not check the same behavior twice, and do not copy a literal from the source into an assertion unless the value is what the code promises (a default, a format, a message under test).
 - Assert errors by class, code and data; match the message only when the message is the behavior under test.
 - One `describe` per unit exported from its module, named exactly as the export, and no `describe` for the file.
+- In `e2e/`, which runs the hub as a process and has no exports, one `describe` per file, named after the behavior.
 - Each test name states one behavior and its condition, in the present tense: `returns the defaults when the file is missing`.
 - Test files mirror the source: `src/a/b.ts` is tested in `test/a/b.test.ts`.
 - A package tests its own adapter against the real dependency (SQLite, the simulated Matter network, a WebSocket on loopback); packages that use it get fakes of the port.

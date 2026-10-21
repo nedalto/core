@@ -2,10 +2,14 @@ import "./sdk-config.ts";
 import type { Writable } from "node:stream";
 
 import { type MatterControllerDeps, type Controller, MatterController } from "./controller.ts";
-import { configureEnvironment, type MatterOptions } from "./environment.ts";
+import { configureEnvironment, type EnvironmentOptions } from "./environment.ts";
 
 export type { Controller } from "./controller.ts";
-export type { MatterOptions } from "./environment.ts";
+
+/** The configuration of the SDK, and the version of the hub that the controller announces on the fabric. */
+export interface MatterOptions extends EnvironmentOptions {
+    readonly version: string;
+}
 
 /** The logger, node repository and bus the controller works with, and the stream where the SDK writes its log. */
 export interface MatterDeps extends MatterControllerDeps {
@@ -19,9 +23,9 @@ export interface MatterDeps extends MatterControllerDeps {
 export function createMatterController(
     storagePath: string,
     { stream, logger: rootLogger, ...deps }: MatterDeps,
-    options: MatterOptions,
+    { version, ...options }: MatterOptions,
 ): Controller {
     const logger = rootLogger.get("Matter");
     const environment = configureEnvironment(storagePath, stream, options);
-    return new MatterController(environment, { logger, ...deps });
+    return new MatterController(environment, { logger, ...deps }, version);
 }
