@@ -18,7 +18,8 @@ Packages import only `@nedalto/contract` subpaths (enforced by oxlint); `apps/hu
 ## Verification
 
 Node 26 and npm 11.
-Node runs the TypeScript sources directly: there is no build step, `tsc` only type-checks.
+Node runs the TypeScript sources directly in development and in the tests, and `tsc` only type-checks.
+The rolldown bundle of `apps/hub` exists only to distribute it (`npm run --workspace=@nedalto/hub build`).
 
 A change is done when these pass (CI runs the same):
 
@@ -31,8 +32,10 @@ Before calling a change done, review its diff as a reviewer would: every changed
 
 `npm run format` and `npm run lint:fix` fix what they can.
 
-The end-to-end suite runs separately and needs IPv6, which Matter requires:
+The end-to-end suite runs separately and needs IPv6, which Matter requires.
+It runs against `dist/main.js`, so build first:
 
+    npm run --workspace=@nedalto/hub build
     npm run --workspace=@nedalto/hub e2e
 
 ## Documentation

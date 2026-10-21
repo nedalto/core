@@ -37,7 +37,7 @@ jobs:
 
   test:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
         with:
@@ -47,3 +47,22 @@ jobs:
           node-version-file: package.json
       - run: npm ci
       - run: npm run --workspaces test
+
+  hub:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: package.json
+      - run: npm ci
+      - run: npm run --workspace=@nedalto/hub build
+      - run: npm pack --no-workspaces --pack-destination apps/hub/dist ./apps/hub/dist
+      # Installed outside the repository, where the workspace's node_modules cannot supply what the manifest lacks.
+      - run: npm install --global --prefix "$RUNNER_TEMP/host" apps/hub/dist/nedalto-hub-*.tgz
+      - run: npm run --workspace=@nedalto/hub e2e
+        env:
+          E2E_HUB_BIN: ${{ runner.temp }}/host/bin/nedalto-hub

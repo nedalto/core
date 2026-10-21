@@ -10,7 +10,23 @@
   "env": { "node": true },
   "rules": {
     "no-console": "warn",
+    "no-restricted-imports": [
+      "error",
+      {
+        "patterns": [
+          {
+            "group": ["@nedalto/**", "!@nedalto/contract/**"],
+            "message": "Only apps/hub composes the packages; elsewhere import @nedalto/contract subpaths only."
+          },
+          {
+            "group": ["@matter/**"],
+            "message": "Only packages/matter talks to the Matter SDK."
+          }
+        ]
+      }
+    ],
     "typescript/ban-ts-comment": "error",
+    "typescript/no-deprecated": "warn",
     "typescript/no-floating-promises": [
       "error",
       { "allowForKnownSafeCalls": [{ "from": "package", "package": "node:test", "name": ["describe", "test"] }] }
@@ -18,32 +34,20 @@
     "typescript/no-misused-promises": "error",
     "typescript/no-unsafe-type-assertion": "error",
     "typescript/switch-exhaustiveness-check": "error",
-    "typescript/no-deprecated": "warn",
     "unicorn/filename-case": ["error", { "case": "kebabCase" }]
   },
   "overrides": [
     {
-      "files": ["packages/**/*.ts"],
+      "files": ["apps/hub/{src,test}/**/*.ts"],
       "rules": {
         "no-restricted-imports": [
           "error",
-          {
-            "patterns": [
-              {
-                "group": ["@nedalto/**", "!@nedalto/contract/**"],
-                "message": "Packages may only import @nedalto/contract subpaths; apps/hub composes them."
-              },
-              {
-                "group": ["@matter/**"],
-                "message": "Only packages/matter talks to the Matter SDK."
-              }
-            ]
-          }
+          { "patterns": [{ "group": ["@matter/**"], "message": "Only packages/matter talks to the Matter SDK." }] }
         ]
       }
     },
     {
-      "files": ["packages/matter/**/*.ts"],
+      "files": ["packages/matter/**/*.ts", "apps/hub/e2e/**/*.ts"],
       "rules": {
         "import/no-unassigned-import": ["error", { "allow": ["**/sdk-config.ts"] }],
         "no-restricted-imports": [
@@ -52,7 +56,7 @@
             "patterns": [
               {
                 "group": ["@nedalto/**", "!@nedalto/contract/**"],
-                "message": "Packages may only import @nedalto/contract subpaths; apps/hub composes them."
+                "message": "Only apps/hub composes the packages; elsewhere import @nedalto/contract subpaths only."
               }
             ]
           }
@@ -70,13 +74,7 @@
       }
     },
     {
-      "files": ["packages/database/src/rows.ts"],
-      "rules": {
-        "typescript/no-unsafe-type-assertion": "off"
-      }
-    },
-    {
-      "files": ["packages/contract/src/common/ids.ts"],
+      "files": ["packages/contract/src/common/ids.ts", "packages/database/src/rows.ts"],
       "rules": {
         "typescript/no-unsafe-type-assertion": "off"
       }

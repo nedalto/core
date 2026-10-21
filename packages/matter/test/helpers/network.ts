@@ -83,7 +83,11 @@ export class TestNetwork {
         const logger = new RecordingLogger();
         const nodeRepository = new MemoryNodeRepository();
         const endpointRepository = new MemoryEndpointRepository();
-        const controller = new MatterController(environment, { logger, nodeRepository, endpointRepository, bus });
+        const controller = new MatterController(
+            environment,
+            { logger, nodeRepository, endpointRepository, bus },
+            "0.0.1",
+        );
         this.#controllers.push(controller);
         return { controller, bus, logger, nodeRepository, endpointRepository };
     }
