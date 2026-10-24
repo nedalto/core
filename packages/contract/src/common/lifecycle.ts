@@ -6,6 +6,7 @@
  * `stop()` may be called at any time, also before `start()` or after a failed one, and
  * then does nothing. It may reject; the caller logs the error and goes on.
  * A stopped instance is not started again.
+ * See `docs/decisions/0004-component-lifecycle.md`.
  */
 export interface Lifecycle {
     start(): Promise<void>;

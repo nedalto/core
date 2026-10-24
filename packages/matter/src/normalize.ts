@@ -9,6 +9,7 @@ const MAX_SAFE = BigInt(Number.MAX_SAFE_INTEGER);
  * It goes by the value and not by the Matter type of the attribute, so an integer is a `number` in the safe
  * range and a `bigint` outside it, whichever of the two the SDK used.
  * Throws `InternalError` for a value that has no `AttributeValue` form.
+ * See `docs/decisions/0001-integers-and-bytes-on-the-wire.md`.
  */
 export function normalizeValue(value: unknown): AttributeValue {
     switch (typeof value) {

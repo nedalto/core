@@ -3,6 +3,7 @@ import { createServer, type IncomingMessage, type Server } from "node:http";
 
 import { type RawData, type WebSocket, WebSocketServer } from "ws";
 
+import type { Unsubscribe } from "@nedalto/contract/common/bus.ts";
 import type { Lifecycle } from "@nedalto/contract/common/lifecycle.ts";
 import { isCompatibleSchema, SCHEMA_VERSION } from "@nedalto/contract/common/version.ts";
 import { encode } from "@nedalto/contract/common/wire.ts";
@@ -49,6 +50,13 @@ function declaredVersion(url: string | undefined): number | null {
     return /^\d+$/.test(version ?? "") ? Number(version) : null;
 }
 
+interface Open {
+    readonly server: Server;
+    readonly wss: WebSocketServer;
+    readonly heartbeat: NodeJS.Timeout;
+    readonly unsubscribes: readonly Unsubscribe[];
+}
+
 /**
  * The HTTP and WebSocket endpoint of the hub: one JSON-RPC connection per client.
  * Only connections that offer the token as a subprotocol and declare a schema version the hub
@@ -62,11 +70,8 @@ export class HttpServer implements Lifecycle {
     readonly #tokenDigest: Buffer;
     readonly #subscriptions: Subscriptions;
     readonly #dispatcher: Dispatcher;
-    readonly #unsubscribes: (() => void)[] = [];
     readonly #awaitingPong = new WeakSet<WebSocket>();
-    #server: Server | undefined;
-    #wss: WebSocketServer | undefined;
-    #heartbeat: NodeJS.Timeout | undefined;
+    #open: Open | undefined;
 
     constructor({ logger, bus, views, handlers }: HttpServerDeps, options: ServerOptions) {
         this.#logger = logger;
@@ -80,7 +85,7 @@ export class HttpServer implements Lifecycle {
 
     /** The port the server listens on, which tells where it is when it was asked for port 0. */
     get port(): number {
-        const address = this.#server?.address();
+        const address = this.#open?.server.address();
         return typeof address === "object" && address !== null ? address.port : this.#port;
     }
 
@@ -94,6 +99,7 @@ export class HttpServer implements Lifecycle {
             // Node 26.10: a WebSocket client fails the handshake, with 1006, if the response selects none
             // of the subprotocols it offered. So a wrong token is answered like a right one, and refused
             // after the upgrade.
+            // See `docs/decisions/0002-authentication-in-the-websocket-handshake.md`.
             handleProtocols: (protocols) =>
                 [...protocols].find((protocol) => this.#isToken(protocol)) ?? protocols.values().next().value ?? false,
         });
@@ -108,38 +114,33 @@ export class HttpServer implements Lifecycle {
             wss.handleUpgrade(request, socket, head, (ws) => this.#onConnection(ws, request));
         });
 
-        this.#heartbeat = setInterval(() => this.#pulse(wss), HEARTBEAT_MS);
-        for (const eventName of EVENT_NAMES) {
-            this.#unsubscribes.push(
-                this.#bus.on(eventName, (payload) => this.#subscriptions.forward(eventName, payload)),
-            );
-        }
-        this.#server = server;
-        this.#wss = wss;
+        const heartbeat = setInterval(() => this.#pulse(wss), HEARTBEAT_MS);
+        const unsubscribes = EVENT_NAMES.map((eventName) =>
+            this.#bus.on(eventName, (payload) => this.#subscriptions.forward(eventName, payload)),
+        );
+        this.#open = { server, wss, heartbeat, unsubscribes };
         this.#logger.notice("ready", this.#host, this.port);
     }
 
     async stop(): Promise<void> {
-        const server = this.#server;
-        const wss = this.#wss;
-        if (server === undefined || wss === undefined) {
+        const open = this.#open;
+        if (open === undefined) {
             return;
         }
-        this.#server = undefined;
-        this.#wss = undefined;
+        this.#open = undefined;
 
-        clearInterval(this.#heartbeat);
-        for (const unsubscribe of this.#unsubscribes.splice(0)) {
+        clearInterval(open.heartbeat);
+        for (const unsubscribe of open.unsubscribes) {
             unsubscribe();
         }
-        for (const ws of wss.clients) {
+        for (const ws of open.wss.clients) {
             ws.close(GOING_AWAY, "The hub is stopping");
         }
         await new Promise<void>((resolve, reject) => {
-            wss.close((error) => (error === undefined ? resolve() : reject(error)));
+            open.wss.close((error) => (error === undefined ? resolve() : reject(error)));
         });
         await new Promise<void>((resolve, reject) => {
-            server.close((error) => (error === undefined ? resolve() : reject(error)));
+            open.server.close((error) => (error === undefined ? resolve() : reject(error)));
         });
         this.#logger.notice("closed");
     }

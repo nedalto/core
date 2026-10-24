@@ -13,6 +13,11 @@ export class RecordingBus implements DomainEventBus {
         this.#emitter.emit(name, payload);
     }
 
+    /** How many handlers are subscribed, to every event. */
+    get handlerCount(): number {
+        return this.#emitter.eventNames().reduce((count, name) => count + this.#emitter.listenerCount(name), 0);
+    }
+
     on<K extends keyof DomainEventMap>(name: K, handler: (payload: DomainEventMap[K]) => void): Unsubscribe {
         this.#emitter.on(name, handler);
         return () => {

@@ -30,6 +30,7 @@ const INTEGER_LITERAL = /^-?\d+$/;
 /**
  * Parses a frame. An integer literal that is not a safe integer comes out as a `bigint`, exactly;
  * every other number comes out as `JSON.parse` gives it.
+ * See `docs/decisions/0001-integers-and-bytes-on-the-wire.md`.
  */
 export const decode = (text: string): unknown =>
     JSON.parse(text, (_key, value, { source }) =>

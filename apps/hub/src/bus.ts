@@ -28,7 +28,7 @@ class SyncEventBus implements DomainEventBus {
 
     emit<K extends EventName>(eventName: K, payload: DomainEventMap[K]): void {
         // A copy, so that a handler added by another handler waits for the next event.
-        for (const handler of this.#subscriptions[eventName].values().toArray()) {
+        for (const handler of Array.from(this.#subscriptions[eventName])) {
             try {
                 handler(payload);
             } catch (error) {
@@ -48,5 +48,8 @@ class SyncEventBus implements DomainEventBus {
     }
 }
 
-/** A `DomainEventBus` that logs the handlers that throw, with `logger`. */
+/**
+ * A `DomainEventBus` that delivers an event to every handler before `emit` returns, and logs the handlers that
+ * throw, with `logger`. See `docs/decisions/0005-synchronous-in-process-event-bus.md`.
+ */
 export const createSyncEventBus = (logger: Logger): DomainEventBus => new SyncEventBus(logger.get("EventBus"));

@@ -23,10 +23,12 @@ The rolldown bundle of `apps/hub` exists only to distribute it (`npm run --works
 
 A change is done when these pass (CI runs the same):
 
-    npm run format:check
-    npm run lint
-    npm run --workspaces type
-    npm run --workspaces test
+```sh
+npm run format:check
+npm run lint
+npm run --workspaces type
+npm run --workspaces test
+```
 
 Before calling a change done, review its diff as a reviewer would: every changed line against this file and the rules loaded for it.
 
@@ -35,8 +37,10 @@ Before calling a change done, review its diff as a reviewer would: every changed
 The end-to-end suite runs separately and needs IPv6, which Matter requires.
 It runs against `dist/main.js`, so build first:
 
-    npm run --workspace=@nedalto/hub build
-    npm run --workspace=@nedalto/hub e2e
+```sh
+npm run --workspace=@nedalto/hub build
+npm run --workspace=@nedalto/hub e2e
+```
 
 ## Documentation
 
@@ -62,7 +66,7 @@ It runs against `dist/main.js`, so build first:
 - Markdown: one sentence per line, no hard wrapping.
 - Name an interface after its role and its implementation after the technology behind it (`Database`, `SqliteDatabase`, `createSqliteDatabase`); no `Provider` or `Manager` suffixes.
 - Do not name a declaration after an export of a module it is used alongside (`Server` from `node:http`); where two such names meet, alias the module's import (`Logger as SdkLogger`).
-- A package's `exports` lists only the modules `apps/hub` imports; `packages/contract` alone exports every module.
+- A package's `exports` lists only the modules `apps/hub` imports; `packages/contract` alone exports every module except those under `internal/`.
 - Collaborators passed as one object have a `…Deps` type and are destructured in the signature.
 - A standalone function is an arrow when its body is a single expression and a `function` declaration otherwise; functions held in object properties and inline callbacks are arrows.
 - A package's factory scopes the logger with `get`; its classes receive the logger they write to.

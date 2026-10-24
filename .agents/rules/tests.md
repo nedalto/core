@@ -21,5 +21,5 @@ A test earns its place by catching a change in behavior that nothing else would 
 - Fakes are hand-written, implement only what the package uses, and throw on anything else.
 - A fake or helper moves to `test/helpers/` when a second test file needs it.
 - Never sleep: await the event or response that proves the state, use `mock.timers` for time, and to show something did not happen, await a later event ordered after it.
-- Test files run in parallel: listen on port 0, write under `mkdtemp` and remove it after the test, keep no global state.
+- Files in `test/` run in parallel: listen on port 0, write under `mkdtemp` and remove it after the test, keep no global state.
 - `test/` runs in-process, with no multicast or mDNS; `e2e/` runs the hub over a real network and needs IPv6.

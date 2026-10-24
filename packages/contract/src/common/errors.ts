@@ -12,7 +12,10 @@ interface AppErrorOptions extends ErrorOptions {
     data?: Readonly<Record<string, WireValue>>;
 }
 
-/** Base of the errors a client can receive. `cause` is for the log only. */
+/**
+ * Base of the errors a client can receive. `cause` is for the log only.
+ * See `docs/decisions/0003-error-model.md`.
+ */
 export abstract class AppError extends Error {
     abstract readonly code: ErrorCode;
     readonly data: Readonly<Record<string, WireValue>> | undefined;
