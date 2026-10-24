@@ -17,6 +17,7 @@ export interface RunDeps {
 /**
  * Runs `lifecycle` until SIGINT or SIGTERM and then exits: with 0 after stopping it, with 1 if it fails to start.
  * The signals are handled from before `start()`, so one that arrives while it runs stops the lifecycle once it is up.
+ * See `docs/decisions/0004-component-lifecycle.md`.
  */
 export async function run({ lifecycle, process }: RunDeps): Promise<void> {
     const { promise: stopRequested, resolve: requestStop } = Promise.withResolvers<void>();

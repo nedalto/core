@@ -19,6 +19,10 @@ A number written with a fraction or an exponent (`1.0`, `1e3`) is a float: it is
 A client must read the integer literals of a message exactly, and write a `bigint` as its exact literal, because the usual JSON functions round what is outside the safe range.
 In JavaScript that is `JSON.parse` with a reviver that reads `context.source`, and `JSON.stringify` with a replacer that returns `JSON.rawJSON`, which is how the hub does it (checked in Node 26.10).
 
+### Bytes
+
+The hub writes an octet string as a string of lowercase hexadecimal digits, two per byte, with no prefix.
+
 ### Reserved keys
 
 Keys that start with `$` are reserved.

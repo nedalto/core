@@ -743,6 +743,15 @@ describe("HttpServer", () => {
         assert.equal((await client.closed).code, 1001);
     });
 
+    test("unsubscribes from the bus on stop()", async (context) => {
+        const { server, bus } = await startServer(context);
+        assert.notEqual(bus.handlerCount, 0);
+
+        await server.stop();
+
+        assert.equal(bus.handlerCount, 0);
+    });
+
     test("does nothing when the server was never started", async () => {
         const server = createHttpServer(createFakes(), { host: "127.0.0.1", port: 0, authToken: TOKEN });
 

@@ -7,7 +7,7 @@ It exposes a [JSON-RPC 2.0](https://www.jsonrpc.org/specification) WebSocket API
 
 > [!WARNING]
 > Early development.
-> There are no releases yet and it is not usable.
+> Releases are previews and the API can change without notice.
 
 ## Contributing
 

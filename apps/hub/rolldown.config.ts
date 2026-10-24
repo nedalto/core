@@ -119,6 +119,7 @@ export default defineConfig({
         sourcemap: true,
         sourcemapExcludeSources: true,
         // Inside main.js its assignments would run after the SDK, which refuses them; as a chunk, main.js imports it first.
+        // See `docs/decisions/0006-running-and-distributing-the-hub.md`.
         codeSplitting: { groups: [{ name: SDK_CONFIG_CHUNK, test: SDK_CONFIG_MODULE }] },
     },
 });

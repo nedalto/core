@@ -12,7 +12,7 @@ import type { NodeGateway, NodeRepository } from "@nedalto/contract/node/ports.t
 import { MatterEndpointGateway } from "./gateways/endpoint.ts";
 import { MatterNodeGateway } from "./gateways/node.ts";
 import { Identity } from "./identity.ts";
-import { softwareVersionOf } from "./version.ts";
+import { type VersionAttributes, versionAttributesOf } from "./version.ts";
 
 /**
  * The Matter controller of the hub.
@@ -57,7 +57,7 @@ export class MatterController implements Controller {
     readonly #nodeRepository: NodeRepository;
     readonly #endpointRepository: EndpointRepository;
     readonly #bus: DomainEventBus;
-    readonly #version: { readonly softwareVersion: number; readonly softwareVersionString: string };
+    readonly #version: VersionAttributes;
     #open: Open | undefined;
 
     /**
@@ -74,7 +74,7 @@ export class MatterController implements Controller {
         this.#nodeRepository = nodeRepository;
         this.#endpointRepository = endpointRepository;
         this.#bus = bus;
-        this.#version = { softwareVersion: softwareVersionOf(version), softwareVersionString: version };
+        this.#version = versionAttributesOf(version);
     }
 
     get node(): NodeGateway {
@@ -89,6 +89,7 @@ export class MatterController implements Controller {
         // @matter/node 0.17.9: `ControllerBehavior` is what lets the node discover and commission devices.
         // Commissioning is disabled so that the hub never advertises itself as a commissionable device; the
         // behavior only does it by itself while every fabric of the node is one it controls.
+        // See `docs/decisions/0007-matter-controller-on-the-node-api.md`.
         const server = await ServerNode.create(ServerNode.RootEndpoint.with(ControllerBehavior), {
             environment: this.#environment,
             id: NODE_ID,

@@ -1,6 +1,9 @@
 import { IntegrationError, NotFoundError, UnreachableError } from "../common/errors.ts";
 import type { EndpointId } from "../common/ids.ts";
 
+// Matter writes ids in hexadecimal; this is how @matter/types 0.17.9 writes them in its log.
+const hex = (id: number): string => `0x${id.toString(16)}`;
+
 /** The endpoint does not exist. */
 export class EndpointNotFoundError extends NotFoundError {
     constructor(endpointId: EndpointId) {
@@ -11,7 +14,7 @@ export class EndpointNotFoundError extends NotFoundError {
 /** The endpoint does not serve the attribute. */
 export class AttributeNotFoundError extends NotFoundError {
     constructor(endpointId: EndpointId, clusterId: number, attributeId: number) {
-        super(`Attribute ${attributeId} of cluster ${clusterId} not found on endpoint ${endpointId}`, {
+        super(`Attribute ${hex(attributeId)} of cluster ${hex(clusterId)} not found on endpoint ${endpointId}`, {
             data: { endpointId, clusterId, attributeId },
         });
     }
@@ -20,7 +23,7 @@ export class AttributeNotFoundError extends NotFoundError {
 /** The cluster has no such command. */
 export class CommandNotFoundError extends NotFoundError {
     constructor(endpointId: EndpointId, clusterId: number, commandId: number) {
-        super(`Command ${commandId} of cluster ${clusterId} not found on endpoint ${endpointId}`, {
+        super(`Command ${hex(commandId)} of cluster ${hex(clusterId)} not found on endpoint ${endpointId}`, {
             data: { endpointId, clusterId, commandId },
         });
     }
@@ -34,9 +37,12 @@ export class InteractionRejectedError extends IntegrationError {
         target: { readonly attributeId: number } | { readonly commandId: number },
         status: number,
     ) {
-        super(`Device rejected the request on cluster ${clusterId} of endpoint ${endpointId}: status ${status}`, {
-            data: { endpointId, clusterId, ...target, status },
-        });
+        super(
+            `Device rejected the request on cluster ${hex(clusterId)} of endpoint ${endpointId}: status ${hex(status)}`,
+            {
+                data: { endpointId, clusterId, ...target, status },
+            },
+        );
     }
 }
 

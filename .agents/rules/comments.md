@@ -1,5 +1,6 @@
 ---
 paths:
+  - "{packages,apps}/*/*.ts"
   - "{packages,apps}/*/{src,test,e2e}/**/*.ts"
 ---
 
