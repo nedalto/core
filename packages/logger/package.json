@@ -22,6 +22,6 @@
     "rotating-file-stream": "^3.2.10"
   },
   "devDependencies": {
-    "@types/node": "^26.6.4"
+    "@types/node": "^26.6.5"
   }
 }
