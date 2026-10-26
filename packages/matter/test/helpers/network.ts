@@ -123,7 +123,7 @@ export class TestNetwork {
      * It is what the gateways would hold, for the tests that exercise a unit with SDK values.
      */
     async peer(manualCode: string): Promise<ClientNode> {
-        const server = await ServerNode.create(ServerNode.RootEndpoint.with(ControllerBehavior), {
+        const server = await ServerNode.create(ServerNode.RootEndpointWithoutGroupcast.with(ControllerBehavior), {
             environment: this.environment(),
             id: "peer-controller",
             commissioning: { enabled: false },

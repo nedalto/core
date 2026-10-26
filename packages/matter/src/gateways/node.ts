@@ -67,7 +67,7 @@ export class MatterNodeGateway implements NodeGateway {
         }
 
         // From here the device belongs to the fabric: a failure below leaves it there, unknown to the caller.
-        // @matter/node 0.17.9: for a newly commissioned peer, `commission()` returns after the initial read of
+        // @matter/node 0.18.0: for a newly commissioned peer, `commission()` returns after the initial read of
         // the peer's structure (unless `autoStateInitialize` is false), so its endpoints and Basic Information
         // are already available.
         const nodeId = createNodeId();
@@ -117,7 +117,7 @@ export class MatterNodeGateway implements NodeGateway {
     }
 
     #commissioningOptions(setupCode: string): CommissioningClient.CommissioningOptions {
-        // @matter/node 0.17.9: `pairingCode` is read as a manual pairing code, so a QR payload is decoded here.
+        // @matter/node 0.18.0: `pairingCode` is read as a manual pairing code, so a QR payload is decoded here.
         // The manual code is decoded too, so that a mistyped one is refused before the SDK is reached.
         if (!setupCode.startsWith(QR_PREFIX)) {
             try {

@@ -44,7 +44,7 @@ function normalizeObject(value: object | null): AttributeValue {
     if (Array.isArray(value)) {
         return value.map(normalizeValue);
     }
-    // @matter/node 0.17.9: the structs and bitmaps in a node's cached state are instances of classes the SDK
+    // @matter/node 0.18.0: the structs and bitmaps in a node's cached state are instances of classes the SDK
     // generates, and those in a read response are plain objects; both report `[object Object]`, as a `Date` or
     // a `Map` does not. A field the device left out is `undefined`, and is left out here too.
     if (Object.prototype.toString.call(value) === "[object Object]") {

@@ -24,10 +24,10 @@ import {
 
 /** The contract error for what the SDK threw while commissioning, which keeps it as the `cause`. */
 export function classifyCommissioningError(error: unknown): AppError {
-    // @matter/node 0.17.9: of the commissioning discovery, `DiscoveryError` is thrown when no attempt failed
-    // (no device discovered, or every attempt canceled or timed out) and `DiscoveryAggregateError` when attempts
-    // failed, carrying their errors. `DiscoveryAggregateError` also gathers failures of the discovery scanners,
-    // which are reported as `pairing-failed` too rather than told apart by the errors inside it.
+    // @matter/node 0.18.0: a discovery that ends with no attempt failing (no device found, every attempt canceled
+    // or timed out, or no scanner to search with) throws `DiscoveryError` or a subtype. One where attempts or the
+    // scanners failed throws `DiscoveryAggregateError`, which is not a subtype and is reported as `pairing-failed`
+    // without looking at the errors it holds. A device that was found but cannot be set up throws its own error.
     if (error instanceof DiscoveryError) {
         return new CommissioningFailedError("not-found", error);
     }
@@ -72,7 +72,7 @@ export function classifyInteractionError(endpointId: EndpointId, clusterId: numb
     return new IntegrationError("Interaction failed", { cause: error, data: { endpointId, clusterId } });
 }
 
-// @matter/protocol 0.17.9: a device answers a request on a path it does not serve with the status of the first
+// @matter/protocol 0.18.0: a device answers a request on a path it does not serve with the status of the first
 // level missing, and a write to an attribute it serves read-only with UnsupportedWrite.
 const MISSING = new Set([Status.UnsupportedEndpoint, Status.UnsupportedCluster]);
 

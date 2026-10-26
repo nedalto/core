@@ -1,7 +1,7 @@
 import { IntegrationError, NotFoundError, UnreachableError } from "../common/errors.ts";
 import type { EndpointId } from "../common/ids.ts";
 
-// Matter writes ids in hexadecimal; this is how @matter/types 0.17.9 writes them in its log.
+// Matter writes ids in hexadecimal; this is how @matter/types 0.18.0 writes them in its log.
 const hex = (id: number): string => `0x${id.toString(16)}`;
 
 /** The endpoint does not exist. */

@@ -11,7 +11,7 @@ export const roomIdSchema = v.custom<RoomId>(isUuidV7, "must be a UUID v7");
 const NAME_MAX_BYTES = 32;
 const utf8 = new TextEncoder();
 
-// @matter/types 0.17.9: encoding a string with U+001F throws, and decoding one cuts it there.
+// @matter/types 0.18.0: encoding a string with U+001F throws, and decoding one cuts it there.
 export const nameSchema = v.pipe(
     v.string(),
     v.minLength(1, "name must not be empty"),

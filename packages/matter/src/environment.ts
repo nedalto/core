@@ -25,11 +25,11 @@ export function configureEnvironment(storagePath: string, stream: Writable, opti
         },
     });
     Logger.format = LogFormat.PLAIN;
-    // @matter/general 0.17.9: `Logger.level` accepts debug, info, notice, warn, error and fatal, in
+    // @matter/general 0.18.0: `Logger.level` accepts debug, info, notice, warn, error and fatal, in
     // increasing severity, which are the values and the order of our `LogLevel`.
     Logger.level = options.logLevel;
 
-    // @matter/protocol 0.17.9: without this variable mDNS uses every network interface.
+    // @matter/protocol 0.18.0: without this variable mDNS uses every network interface.
     if (options.networkInterface !== undefined) {
         environment.vars.set("mdns.networkInterface", options.networkInterface);
     }

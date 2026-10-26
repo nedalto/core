@@ -23,9 +23,6 @@ export interface SimulatedLight {
     readonly setOn: (on: boolean) => Promise<void>;
 }
 
-// The hub's controller takes the Matter port 5540, so a device on the same host needs another.
-const DEVICE_PORT = 5541;
-
 // Any passcode and discriminator the specification allows.
 const PASSCODE = 20202021;
 const DISCRIMINATOR = 3840;
@@ -37,7 +34,7 @@ const DISCRIMINATOR = 3840;
 export async function startLight(context: TestContext): Promise<SimulatedLight> {
     const directory = await scratchDirectory(context, "nedalto-e2e-light-");
 
-    // @matter/nodejs 0.17.9: the filesystem reads `storage.path` each time it opens a file.
+    // @matter/nodejs 0.18.0: the filesystem reads `storage.path` each time it opens a file.
     const environment = Environment.default;
     environment.vars.set("storage.path", directory);
 
@@ -52,7 +49,6 @@ export async function startLight(context: TestContext): Promise<SimulatedLight> 
 
     const node = await ServerNode.create({
         id: "light",
-        network: { port: DEVICE_PORT },
         commissioning: { passcode: PASSCODE, discriminator: DISCRIMINATOR },
         basicInformation: {
             vendorName: "Nedalto",

@@ -1,4 +1,4 @@
-/* oxlint-disable typescript/no-deprecated -- @matter/types 0.17.9 deprecates one overload of the `ClusterType` function, and oxlint reports it on every use of the namespace of the same name; nothing deprecated is used here. */
+/* oxlint-disable typescript/no-deprecated -- @matter/types 0.18.0 deprecates the overload of the `ClusterType` function that takes options, and oxlint reports it on every use of the namespace of the same name; nothing deprecated is used here. */
 import "./sdk-config.ts";
 import { ClusterModel, Matter } from "@matter/main/model";
 import type { Specifier } from "@matter/main/protocol";
@@ -16,7 +16,7 @@ export interface SpecCommand {
     readonly command: ClusterType.Command;
 }
 
-// @matter/types 0.17.9: `ClusterType.attributes()` and `commands()` leave out what the specification disallows
+// @matter/types 0.18.0: `ClusterType.attributes()` and `commands()` leave out what the specification disallows
 // on the cluster, the global attributes and the responses, which share the id of the request they answer. What
 // the descriptor holds is what the SDK can build a request from.
 function describeCluster(clusterId: number): Specifier.ClusterLike | undefined {

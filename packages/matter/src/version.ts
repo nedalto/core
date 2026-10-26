@@ -20,7 +20,7 @@ const COMPONENT_LIMIT = 1000;
 export function versionAttributesOf(version: string): VersionAttributes {
     const [major = 0, minor = 0, patch = 0] = SEMANTIC_VERSION.exec(version)?.slice(1, 4).map(Number) ?? [];
     const softwareVersion = major * COMPONENT_LIMIT ** 2 + minor * COMPONENT_LIMIT + patch;
-    // @matter/node 0.17.9: the SDK takes a zero as unset and announces development values instead.
+    // @matter/node 0.18.0: the SDK takes a zero as unset and announces development values instead.
     if (softwareVersion === 0 || [major, minor, patch].some((component) => component >= COMPONENT_LIMIT)) {
         throw new InternalError(`Version ${version} has no Matter software version`);
     }

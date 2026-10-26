@@ -119,7 +119,7 @@ export class MatterEndpointGateway implements EndpointGateway {
 
         let request: Write;
         try {
-            // @matter/protocol 0.17.9: `Write()` does not check a value against the type of the attribute, so
+            // @matter/protocol 0.18.0: `Write()` does not check a value against the type of the attribute, so
             // that a string for a number only fails once the request is sent, and then not as a validation error.
             TlvOfModel(spec.attribute).validate(value);
             request = Write(
@@ -193,7 +193,7 @@ export class MatterEndpointGateway implements EndpointGateway {
         const clusters = clusterBehaviors(endpoint).map((behavior): ClusterState => {
             const state = endpoint.stateOf(behavior.id);
             const attributes: AttributeState[] = [];
-            // @matter/types 0.17.9: `ClusterType.attributes()` leaves the global attributes out of the cluster.
+            // @matter/types 0.18.0: `ClusterType.attributes()` leaves the global attributes out of the cluster.
             for (const [name, attribute] of Object.entries(behavior.cluster.attributes ?? {})) {
                 const value = state[name];
                 // An attribute that the device did not report has no value to give.
@@ -220,7 +220,7 @@ export class MatterEndpointGateway implements EndpointGateway {
                     if (changed === undefined) {
                         continue;
                     }
-                    // @matter/node 0.17.9: `eventsOf(string)` types its observables without arguments, but an
+                    // @matter/node 0.18.0: `eventsOf(string)` types its observables without arguments, but an
                     // attribute's `$Changed` passes the new value first, then the old one and the context.
                     observers.on(changed, (...[value]: unknown[]) => {
                         this.#bus.emit("endpoint:changed", {
