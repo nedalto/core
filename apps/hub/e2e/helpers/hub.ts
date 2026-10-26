@@ -36,7 +36,8 @@ interface HubOptions {
 export const AUTH_TOKEN = "e2e-test-token";
 
 // The config schema keeps ports at 1024 or above, so the hub cannot be asked for a free one.
-// One hub at a time: the controller binds the Matter port 5540, which is why the e2e script runs one file at a time.
+// One hub at a time, which is why the e2e script runs one file at a time: every hub listens on this port, and every
+// simulated light has the same passcode and discriminator, so a hub could commission the light of another file.
 const PORT = 18432;
 
 // The exit of a hub that was asked to stop takes milliseconds; these bound a hang, they are not waited out.

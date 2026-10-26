@@ -86,22 +86,24 @@ export class MatterController implements Controller {
     }
 
     async start(): Promise<void> {
-        // @matter/node 0.17.9: `ControllerBehavior` is what lets the node discover and commission devices.
+        // @matter/node 0.18.0: `ControllerBehavior` is what lets the node discover and commission devices, and the
+        // root without Groupcast keeps the hub from offering itself as a device that receives group messages.
         // Commissioning is disabled so that the hub never advertises itself as a commissionable device; the
         // behavior only does it by itself while every fabric of the node is one it controls.
         // See `docs/decisions/0007-matter-controller-on-the-node-api.md`.
-        const server = await ServerNode.create(ServerNode.RootEndpoint.with(ControllerBehavior), {
+        const server = await ServerNode.create(ServerNode.RootEndpointWithoutGroupcast.with(ControllerBehavior), {
             environment: this.#environment,
             id: NODE_ID,
             basicInformation: { ...BASIC_INFORMATION, ...this.#version },
             commissioning: { enabled: false },
-            // @matter/node 0.17.9: the label of our fabric on the devices, "matter.js" by default.
+            // @matter/node 0.18.0: the label of our fabric on the devices, "matter.js" by default, which the SDK
+            // sets on each peer once, after its first subscription.
             controller: { adminFabricLabel: BASIC_INFORMATION.vendorName },
         });
         const identity = new Identity(this.#logger);
         const node = new MatterNodeGateway(this.#logger, this.#bus, identity, server);
         const endpoint = new MatterEndpointGateway(this.#bus, identity);
-        // @matter/node 0.17.9: the peers are read from storage on first access and start connecting when the
+        // @matter/node 0.18.0: the peers are read from storage on first access and start connecting when the
         // server goes online, so hydrating before `start()` attaches the observers before any connection.
         identity.hydrate(server.peers, this.#nodeRepository, this.#endpointRepository);
         await server.start();
