@@ -2,11 +2,19 @@ import "../src/sdk-config.ts";
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import { Millis, NoResponseTimeoutError } from "@matter/main";
-import { DiscoveryAggregateError, DiscoveryError, IcdPeerAsleepError } from "@matter/main/node";
+import { CrashedDependencyError, DestroyedDependencyError, Millis, NoResponseTimeoutError } from "@matter/main";
+import {
+    DeviceNotDiscoveredError,
+    DiscoveryAggregateError,
+    DiscoveryIncompleteError,
+    FabricOperationInProgressError,
+    IcdPeerAsleepError,
+    NoDiscoveryTransportError,
+} from "@matter/main/node";
 import {
     DeviceAlreadyCommissionedToThisFabricError,
     MaximumCommissionedFabricsReachedError,
+    PasscodeMismatchError,
     PeerAddress,
     PeerUnreachableError,
     TransientPeerCommunicationError,
@@ -24,6 +32,8 @@ import {
 import {
     CommissioningFailedError,
     CommissioningRejectedError,
+    DecommissioningRejectedError,
+    NodeNotFoundError,
     NodeUnreachableError,
 } from "@nedalto/contract/node/errors.ts";
 
@@ -48,30 +58,79 @@ const expectClassified = (
 describe("classifyCommissioningError", () => {
     const cases = [
         {
-            sdkError: new DiscoveryError("no device"),
+            title: "a device that was not discovered",
+            sdkError: new DeviceNotDiscoveredError("no device"),
             type: CommissioningFailedError,
             code: "INTEGRATION_ERROR",
             data: { reason: "not-found" },
         },
         {
+            title: "a device found whose attempts did not finish",
+            sdkError: new DiscoveryIncompleteError("all canceled"),
+            type: CommissioningFailedError,
+            code: "INTEGRATION_ERROR",
+            data: { reason: "pairing-failed" },
+        },
+        {
+            title: "a discovery with no scanner",
+            sdkError: new NoDiscoveryTransportError("no scanner"),
+            type: IntegrationError,
+            code: "INTEGRATION_ERROR",
+            data: undefined,
+        },
+        {
+            title: "attempts that all failed with a passcode mismatch",
+            sdkError: new DiscoveryAggregateError(
+                [new PasscodeMismatchError("wrong"), new PasscodeMismatchError("wrong")],
+                "all attempts failed",
+            ),
+            type: CommissioningFailedError,
+            code: "INTEGRATION_ERROR",
+            data: { reason: "passcode-rejected" },
+        },
+        {
+            title: "an attempt that wraps a passcode mismatch as its cause",
+            sdkError: new DiscoveryAggregateError(
+                [new Error("PASE failed", { cause: new PasscodeMismatchError("wrong") })],
+                "all attempts failed",
+            ),
+            type: CommissioningFailedError,
+            code: "INTEGRATION_ERROR",
+            data: { reason: "passcode-rejected" },
+        },
+        {
+            title: "attempts of which one is not a passcode mismatch",
+            sdkError: new DiscoveryAggregateError(
+                [new PasscodeMismatchError("wrong"), new Error("PASE failed")],
+                "all attempts failed",
+            ),
+            type: CommissioningFailedError,
+            code: "INTEGRATION_ERROR",
+            data: { reason: "pairing-failed" },
+        },
+        {
+            title: "attempts that failed for another reason",
             sdkError: new DiscoveryAggregateError([new Error("PASE failed")], "all attempts failed"),
             type: CommissioningFailedError,
             code: "INTEGRATION_ERROR",
             data: { reason: "pairing-failed" },
         },
         {
+            title: "a device already commissioned to the fabric",
             sdkError: new DeviceAlreadyCommissionedToThisFabricError("already commissioned"),
             type: CommissioningRejectedError,
             code: "CONFLICT_ERROR",
             data: { reason: "already-commissioned" },
         },
         {
+            title: "a full fabric table",
             sdkError: new MaximumCommissionedFabricsReachedError("table full"),
             type: CommissioningRejectedError,
             code: "CONFLICT_ERROR",
             data: { reason: "fabric-table-full" },
         },
         {
+            title: "any other error",
             sdkError: new Error("anything else"),
             type: IntegrationError,
             code: "INTEGRATION_ERROR",
@@ -79,8 +138,8 @@ describe("classifyCommissioningError", () => {
         },
     ];
 
-    for (const { sdkError, type, code, data } of cases) {
-        test(`maps ${sdkError.constructor.name} to ${type.name} with its data`, () => {
+    for (const { title, sdkError, type, code, data } of cases) {
+        test(`maps ${title} to ${type.name} with its data`, () => {
             expectClassified(classifyCommissioningError(sdkError), { type, code, data, cause: sdkError });
         });
     }
@@ -114,6 +173,24 @@ describe("classifyDecommissioningError", () => {
             type: NodeUnreachableError,
             code: "UNREACHABLE_ERROR",
             data: { nodeId, reason: "offline" },
+        },
+        {
+            sdkError: new FabricOperationInProgressError("a commission is running"),
+            type: DecommissioningRejectedError,
+            code: "CONFLICT_ERROR",
+            data: { nodeId, reason: "in-progress" },
+        },
+        {
+            sdkError: new DestroyedDependencyError("node", "is closing or being deleted"),
+            type: NodeNotFoundError,
+            code: "NOT_FOUND_ERROR",
+            data: { nodeId },
+        },
+        {
+            sdkError: new CrashedDependencyError("node", "crashed"),
+            type: IntegrationError,
+            code: "INTEGRATION_ERROR",
+            data: { nodeId },
         },
         {
             sdkError: new Error("fabric removal rejected"),

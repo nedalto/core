@@ -8,7 +8,7 @@ import { createEndpointId, createNodeId, type NodeId } from "@nedalto/contract/c
 import type { EndpointRecord } from "@nedalto/contract/endpoint/types.ts";
 import type { DomainEventBus } from "@nedalto/contract/events.ts";
 import type { Logger } from "@nedalto/contract/logger/ports.ts";
-import { NodeNotFoundError } from "@nedalto/contract/node/errors.ts";
+import { DecommissioningRejectedError, NodeNotFoundError } from "@nedalto/contract/node/errors.ts";
 import type { NodeGateway } from "@nedalto/contract/node/ports.ts";
 import type { CommissioningResult, NodeInfo } from "@nedalto/contract/node/types.ts";
 
@@ -80,13 +80,22 @@ export class MatterNodeGateway implements NodeGateway {
 
     async decommission(nodeId: NodeId, force = false): Promise<void> {
         const node = this.#node(nodeId);
+        // A second call is refused before the SDK: its `finally` would drop the id while the first call still runs.
+        if (this.#decommissioning.has(nodeId)) {
+            throw new DecommissioningRejectedError(nodeId, "in-progress");
+        }
         // The node goes offline while it leaves the fabric, which is not a disconnection to announce.
         this.#decommissioning.add(nodeId);
         try {
             // `delete()` forgets the node without contacting the device; `decommission()` removes our fabric from it.
             await (force ? node.delete() : node.decommission());
         } catch (error) {
-            throw classifyDecommissioningError(nodeId, error);
+            const classified = classifyDecommissioningError(nodeId, error);
+            // The SDK no longer has the node, so it is forgotten here too, as after a decommission that succeeds.
+            if (classified instanceof NodeNotFoundError) {
+                this.#identity.remove(nodeId);
+            }
+            throw classified;
         } finally {
             this.#decommissioning.delete(nodeId);
         }

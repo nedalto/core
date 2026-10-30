@@ -38,6 +38,7 @@ export interface NodeGateway {
      *
      * Throws `NodeNotFoundError` for an unknown node.
      * Throws `NodeUnreachableError` when the device does not answer, and then the node is kept.
+     * Throws `DecommissioningRejectedError` when the node is already being removed.
      */
     decommission(nodeId: NodeId, force?: boolean): Promise<void>;
 

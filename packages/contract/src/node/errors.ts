@@ -3,14 +3,17 @@ import type { NodeId } from "../common/ids.ts";
 
 /** The node does not exist. */
 export class NodeNotFoundError extends NotFoundError {
-    constructor(nodeId: NodeId) {
-        super(`Node ${nodeId} not found`, { data: { nodeId } });
+    constructor(nodeId: NodeId, cause?: unknown) {
+        super(`Node ${nodeId} not found`, { cause, data: { nodeId } });
     }
 }
 
-/** The device could not be commissioned. `data.reason` says whether it was found. */
+/**
+ * The device could not be commissioned. `data.reason` says why: it was not found, it was found and could not be
+ * paired, or it rejected the passcode.
+ */
 export class CommissioningFailedError extends IntegrationError {
-    constructor(reason: "not-found" | "pairing-failed", cause: unknown) {
+    constructor(reason: "not-found" | "pairing-failed" | "passcode-rejected", cause: unknown) {
         super(`Commissioning failed: ${reason}`, { cause, data: { reason } });
     }
 }
@@ -19,6 +22,13 @@ export class CommissioningFailedError extends IntegrationError {
 export class CommissioningRejectedError extends ConflictError {
     constructor(reason: "already-commissioned" | "fabric-table-full", cause: unknown) {
         super(`Commissioning rejected: ${reason}`, { cause, data: { reason } });
+    }
+}
+
+/** The hub rejected the request to remove the node, not the device. `data.reason` says why. */
+export class DecommissioningRejectedError extends ConflictError {
+    constructor(nodeId: NodeId, reason: "in-progress", cause?: unknown) {
+        super(`Decommissioning rejected: ${reason}`, { cause, data: { nodeId, reason } });
     }
 }
 

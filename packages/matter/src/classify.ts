@@ -1,9 +1,17 @@
 import "./sdk-config.ts";
-import { NoResponseTimeoutError } from "@matter/main";
-import { DiscoveryAggregateError, DiscoveryError, IcdPeerAsleepError } from "@matter/main/node";
+import { causedBy, DestroyedDependencyError, NoResponseTimeoutError } from "@matter/main";
+import {
+    DiscoveryAggregateError,
+    DiscoveryError,
+    DiscoveryIncompleteError,
+    FabricOperationInProgressError,
+    IcdPeerAsleepError,
+    NoDiscoveryTransportError,
+} from "@matter/main/node";
 import {
     DeviceAlreadyCommissionedToThisFabricError,
     MaximumCommissionedFabricsReachedError,
+    PasscodeMismatchError,
     TransientPeerCommunicationError,
 } from "@matter/main/protocol";
 import { Status } from "@matter/main/types";
@@ -19,20 +27,31 @@ import {
 import {
     CommissioningFailedError,
     CommissioningRejectedError,
+    DecommissioningRejectedError,
+    NodeNotFoundError,
     NodeUnreachableError,
 } from "@nedalto/contract/node/errors.ts";
 
 /** The contract error for what the SDK threw while commissioning, which keeps it as the `cause`. */
 export function classifyCommissioningError(error: unknown): AppError {
-    // @matter/node 0.18.0: a discovery that ends with no attempt failing (no device found, every attempt canceled
-    // or timed out, or no scanner to search with) throws `DiscoveryError` or a subtype. One where attempts or the
-    // scanners failed throws `DiscoveryAggregateError`, which is not a subtype and is reported as `pairing-failed`
-    // without looking at the errors it holds. A device that was found but cannot be set up throws its own error.
+    // @matter/node 0.18.0: `NoDiscoveryTransportError` and `DiscoveryIncompleteError` are subtypes of `DiscoveryError`,
+    // so they go first: a hub without scanners is not something a client can act on, and a device that was found
+    // but whose attempts did not finish was not missing.
+    if (error instanceof NoDiscoveryTransportError) {
+        return new IntegrationError("Commissioning failed", { cause: error });
+    }
+    if (error instanceof DiscoveryIncompleteError) {
+        return new CommissioningFailedError("pairing-failed", error);
+    }
     if (error instanceof DiscoveryError) {
         return new CommissioningFailedError("not-found", error);
     }
     if (error instanceof DiscoveryAggregateError) {
-        return new CommissioningFailedError("pairing-failed", error);
+        // The manual code carries 4 bits of the discriminator, so the passcode may have been rejected by another
+        // device in pairing mode: the hub knows it was rejected, not that it was mistyped.
+        // @matter/node 0.18.0: the errors of an aggregate may wrap the `PasscodeMismatchError` as a cause.
+        const rejected = error.errors.every((cause) => causedBy(cause, PasscodeMismatchError));
+        return new CommissioningFailedError(rejected ? "passcode-rejected" : "pairing-failed", error);
     }
     if (error instanceof DeviceAlreadyCommissionedToThisFabricError) {
         return new CommissioningRejectedError("already-commissioned", error);
@@ -59,6 +78,14 @@ export function classifyDecommissioningError(nodeId: NodeId, error: unknown): Ap
     const reason = unreachableReason(error);
     if (reason !== undefined) {
         return new NodeUnreachableError(nodeId, reason, error);
+    }
+    // @matter/node 0.18.0: the SDK refuses a second operation on a node that has one running.
+    if (error instanceof FabricOperationInProgressError) {
+        return new DecommissioningRejectedError(nodeId, "in-progress", error);
+    }
+    // @matter/node 0.18.0: the SDK has already deleted the node, e.g. because the device left the fabric.
+    if (error instanceof DestroyedDependencyError) {
+        return new NodeNotFoundError(nodeId, error);
     }
     return new IntegrationError("Decommissioning failed", { cause: error, data: { nodeId } });
 }
