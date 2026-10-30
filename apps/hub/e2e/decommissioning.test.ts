@@ -6,9 +6,6 @@ import { startLight } from "./helpers/device.ts";
 import { startHub } from "./helpers/hub.ts";
 
 describe("decommissioning", () => {
-    // @matter/main 0.17.9: a simulated device that loses its fabric leaves an mDNS resource open and the test
-    // process does not end by itself, which is why the e2e script passes --test-force-exit. Fixed in 0.18,
-    // which is not published yet: remove the flag when updating.
     test("removes the node and its endpoints, and the device can be commissioned again", async (t) => {
         const light = await startLight(t);
         const hub = await startHub(t);

@@ -94,9 +94,6 @@ describe("MatterController", () => {
         await restarted.controller.endpoint.invoke(light.id, ON_OFF, ON_COMMAND);
 
         assert.deepEqual((await changed).endpointId, light.id);
-        // @matter/protocol 0.17.9: a restarted controller that has its subscription up when the device closes
-        // leaves a timer of about 100 seconds, which keeps the process alive; stopped first, it leaves none.
-        await restarted.controller.stop();
     });
 
     test("start() warns about an endpoint of the repository that the node lacks, and does not register it", async (t) => {

@@ -7,8 +7,12 @@ import { CommissioningFlowType, QrPairingCodeCodec } from "@matter/main/types";
 
 import { ValidationError } from "@nedalto/contract/common/errors.ts";
 import { createNodeId } from "@nedalto/contract/common/ids.ts";
-import { NodeNotFoundError } from "@nedalto/contract/node/errors.ts";
+import { DecommissioningRejectedError, NodeNotFoundError } from "@nedalto/contract/node/errors.ts";
 
+import { MatterNodeGateway } from "../../src/gateways/node.ts";
+import { Identity } from "../../src/identity.ts";
+import { RecordingBus } from "../helpers/bus.ts";
+import { RecordingLogger } from "../helpers/logger.ts";
 import { TestNetwork } from "../helpers/network.ts";
 
 const isInvalidSetupCode =
@@ -140,6 +144,44 @@ describe("MatterNodeGateway", () => {
         const { controller } = await network.startController();
 
         await assert.rejects(controller.node.decommission(createNodeId()), NodeNotFoundError);
+    });
+
+    test("decommission rejects a second call for a node that is being decommissioned, and announces no disconnection", async (t) => {
+        const network = new TestNetwork(t);
+        const { manualCode, device } = await network.startDevice();
+        const { controller, bus } = await network.startController();
+        const { node } = await controller.node.commission(manualCode);
+
+        const [first, second] = await Promise.allSettled([
+            controller.node.decommission(node.id),
+            controller.node.decommission(node.id),
+        ]);
+
+        assert.equal(first.status, "fulfilled");
+        assert.equal(second.status, "rejected");
+        const error = second.reason;
+        assert.ok(error instanceof DecommissioningRejectedError);
+        assert.equal(error.code, "CONFLICT_ERROR");
+        assert.deepEqual(error.data, { nodeId: node.id, reason: "in-progress" });
+        assert.equal(device.lifecycle.isCommissioned, false);
+        assert.deepEqual(bus.emitted, []);
+    });
+
+    test("decommission throws NodeNotFoundError and forgets the node when the SDK has already deleted it", async (t) => {
+        const network = new TestNetwork(t);
+        const { manualCode } = await network.startDevice();
+        const peer = await network.peer(manualCode);
+        const logger = new RecordingLogger();
+        const identity = new Identity(logger);
+        const gateway = new MatterNodeGateway(logger, new RecordingBus(), identity, peer.owner);
+        const nodeId = createNodeId();
+        identity.add(nodeId, peer, []);
+        await peer.delete();
+
+        await assert.rejects(gateway.decommission(nodeId), NodeNotFoundError);
+
+        assert.equal(identity.node(nodeId), undefined);
+        gateway.close();
     });
 
     test("decommission does not announce the node leaving the fabric as a disconnection", async (t) => {
