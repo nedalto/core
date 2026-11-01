@@ -18,7 +18,7 @@ declare global {
                 this: unknown,
                 key: string,
                 value: unknown,
-                // Node 26.10: `source` is only there for primitives, not for objects and arrays.
+                // Node 26.13: `source` is only there for primitives, not for objects and arrays.
                 context: { readonly source?: string },
             ) => unknown,
         ): unknown;

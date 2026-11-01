@@ -67,7 +67,7 @@ class RotatingLogFile implements LogFile {
         }
         this.#stream = undefined;
 
-        // rotating-file-stream 3.2.10 on Node 26.10: `end()` on a stream already destroyed by a
+        // rotating-file-stream 3.2.10 on Node 26.13: `end()` on a stream already destroyed by a
         // failure calls back with ERR_STREAM_DESTROYED. That failure went to stderr above, so the
         // error is ignored and the stop still resolves.
         await new Promise<void>((resolve) => {

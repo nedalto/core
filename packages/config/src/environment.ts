@@ -13,7 +13,7 @@ export interface Environment {
 const TOKEN_VARIABLE = "NEDALTO_AUTH_TOKEN";
 const TOKEN_MIN_LENGTH = 8;
 
-// RFC 7230 token characters. Node 26.10: `new WebSocket(url, [token])` throws a `SyntaxError` for
+// RFC 7230 token characters. Node 26.13: `new WebSocket(url, [token])` throws a `SyntaxError` for
 // anything else, a space or `/` for instance.
 const TOKEN_PATTERN = /^[A-Za-z0-9!#$%&'*+.^_`|~-]+$/;
 

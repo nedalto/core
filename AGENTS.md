@@ -17,7 +17,7 @@ Packages import only `@nedalto/contract` subpaths (enforced by oxlint); `apps/hu
 
 ## Verification
 
-Node 26 and npm 11.
+Node 26 LTS (26.13 or later) and npm 11.
 Node runs the TypeScript sources directly in development and in the tests, and `tsc` only type-checks.
 The rolldown bundle of `apps/hub` exists only to distribute it (`npm run --workspace=@nedalto/hub build`).
 

@@ -17,7 +17,7 @@ The hub reads an integer into its canonical form, and writes a `bigint` that is 
 A number written with a fraction or an exponent (`1.0`, `1e3`) is a float: it is never a `bigint`.
 
 A client must read the integer literals of a message exactly, and write a `bigint` as its exact literal, because the usual JSON functions round what is outside the safe range.
-In JavaScript that is `JSON.parse` with a reviver that reads `context.source`, and `JSON.stringify` with a replacer that returns `JSON.rawJSON`, which is how the hub does it (checked in Node 26.10).
+In JavaScript that is `JSON.parse` with a reviver that reads `context.source`, and `JSON.stringify` with a replacer that returns `JSON.rawJSON`, which is how the hub does it (checked in Node 26.13).
 
 ### Bytes
 
@@ -108,7 +108,7 @@ The code of the closing frame says what is wrong, and its reason says it in word
 If the token and the version are both wrong, the code is `4401`.
 
 If the client offers subprotocols, the hub selects the token if it is among them, and the first of the offered ones if it is not.
-That is because a client fails a handshake whose response selects none of the subprotocols it offered, and then never sees the close code (the WebSocket of Node 26.10 reports `1006`).
+That is because a client fails a handshake whose response selects none of the subprotocols it offered, and then never sees the close code (the WebSocket of Node 26.13 reports `1006`).
 If the client offers none, the hub selects none and closes with `4401`.
 
 An HTTP request that does not ask for an upgrade is answered with `426` and no body.

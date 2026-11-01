@@ -96,7 +96,7 @@ export class HttpServer implements Lifecycle {
         const wss = new WebSocketServer({
             noServer: true,
             maxPayload: MAX_PAYLOAD_BYTES,
-            // Node 26.10: a WebSocket client fails the handshake, with 1006, if the response selects none
+            // Node 26.13: a WebSocket client fails the handshake, with 1006, if the response selects none
             // of the subprotocols it offered. So a wrong token is answered like a right one, and refused
             // after the upgrade.
             // See `docs/decisions/0002-authentication-in-the-websocket-handshake.md`.
