@@ -16,11 +16,14 @@ import {
 } from "@matter/main";
 import { BridgedDeviceBasicInformationServer } from "@matter/main/behaviors/bridged-device-basic-information";
 import { OnOffLightDevice } from "@matter/main/devices/on-off-light";
+import { OnOffPlugInUnitDevice } from "@matter/main/devices/on-off-plug-in-unit";
 import { AggregatorEndpoint } from "@matter/main/endpoints/aggregator";
-import { type ClientNode, ControllerBehavior, Endpoint, ServerNode } from "@matter/main/node";
+import { BridgedNodeEndpoint } from "@matter/main/endpoints/bridged-node";
+import { type ClientNode, type CommissioningClient, ControllerBehavior, Endpoint, ServerNode } from "@matter/main/node";
 
 import type { EndpointRecord } from "@nedalto/contract/endpoint/types.ts";
-import type { NodeRecord } from "@nedalto/contract/node/types.ts";
+import type { NodeGateway } from "@nedalto/contract/node/ports.ts";
+import type { EndpointChanges, NodeRecord } from "@nedalto/contract/node/types.ts";
 
 import { MatterController } from "../../src/controller.ts";
 import { RecordingBus } from "./bus.ts";
@@ -37,12 +40,47 @@ export interface TestDevice {
     readonly qrCode: string;
 }
 
+/** A bridge whose devices can come and go while it runs. */
+export interface TestBridge extends TestDevice {
+    /** Adds a bridged light that is on, under the aggregator, so its state cannot be mistaken for a default. */
+    readonly addLight: (id: string, number?: number) => Promise<Endpoint>;
+
+    /**
+     * Adds a bridged power strip under the aggregator, in one go with the two on/off outlets that hang from it.
+     * With `numbers`, it holds the first and the outlets the others, as an endpoint number says nothing of its place.
+     */
+    readonly addStrip: (id: string, numbers?: readonly [number, number, number]) => Promise<Endpoint>;
+}
+
 export interface TestController {
     readonly controller: MatterController;
     readonly bus: RecordingBus;
     readonly logger: RecordingLogger;
     readonly nodeRepository: MemoryNodeRepository;
     readonly endpointRepository: MemoryEndpointRepository;
+}
+
+const bridgedInformation = (id: string, productName: string) => ({
+    nodeLabel: id,
+    productName,
+    uniqueId: id,
+    reachable: true,
+});
+
+/**
+ * Resolves once a notice of a node makes `reconcileEndpoints` report a change, with what `inspect` returned within that
+ * same notice, before anything else could run.
+ */
+export function nextChanges<T>(gateway: NodeGateway, inspect: (changes: EndpointChanges) => T): Promise<T> {
+    return new Promise((resolve) => {
+        const unsubscribe = gateway.onStructureChanged((nodeId) => {
+            const changes = gateway.reconcileEndpoints(nodeId);
+            if (changes.added.length > 0 || changes.removed.length > 0) {
+                unsubscribe();
+                resolve(inspect(changes));
+            }
+        });
+    });
 }
 
 /** A simulated network with its own hosts, devices and controllers, closed when the test ends. */
@@ -122,7 +160,10 @@ export class TestNetwork {
      * The SDK node that a controller of its own holds for the device, which it has commissioned.
      * It is what the gateways would hold, for the tests that exercise a unit with SDK values.
      */
-    async peer(manualCode: string): Promise<ClientNode> {
+    async peer(
+        manualCode: string,
+        options: Partial<CommissioningClient.CommissioningOptions> = {},
+    ): Promise<ClientNode> {
         const server = await ServerNode.create(ServerNode.RootEndpointWithoutGroupcast.with(ControllerBehavior), {
             environment: this.environment(),
             id: "peer-controller",
@@ -130,7 +171,7 @@ export class TestNetwork {
         });
         this.#peerServers.push(server);
         await server.start();
-        return server.peers.commission({ pairingCode: manualCode });
+        return server.peers.commission({ pairingCode: manualCode, ...options });
     }
 
     /** A started on/off light, closed when the test ends. */
@@ -142,26 +183,40 @@ export class TestNetwork {
      * A started bridge: an aggregator with two on/off lights hanging from it, closed when the test ends.
      * Its endpoints are nested, the lights under the aggregator.
      */
-    async startBridge(): Promise<TestDevice> {
-        return this.#startNode({ nodeLabel: "", productName: "Test Bridge" }, async (device) => {
-            const aggregator = new Endpoint(AggregatorEndpoint, { id: "aggregator" });
+    async startBridge(): Promise<TestBridge> {
+        const aggregator = new Endpoint(AggregatorEndpoint, { id: "aggregator" });
+        const addEndpoint = async (endpoint: Endpoint): Promise<Endpoint> => {
+            await aggregator.add(endpoint);
+            return endpoint;
+        };
+        const addLight = (id: string, number?: number, onOff = true): Promise<Endpoint> =>
+            addEndpoint(
+                new Endpoint(OnOffLightDevice.with(BridgedDeviceBasicInformationServer), {
+                    id,
+                    number,
+                    onOff: { onOff },
+                    bridgedDeviceBasicInformation: bridgedInformation(id, "Bridged Light"),
+                }),
+            );
+        const addStrip = (id: string, numbers?: readonly [number, number, number]): Promise<Endpoint> =>
+            addEndpoint(
+                new Endpoint(BridgedNodeEndpoint.with(BridgedDeviceBasicInformationServer), {
+                    id,
+                    number: numbers?.[0],
+                    bridgedDeviceBasicInformation: bridgedInformation(id, "Bridged Strip"),
+                    parts: [
+                        new Endpoint(OnOffPlugInUnitDevice, { id: `${id}-outlet-1`, number: numbers?.[1] }),
+                        new Endpoint(OnOffPlugInUnitDevice, { id: `${id}-outlet-2`, number: numbers?.[2] }),
+                    ],
+                }),
+            );
+        const started = await this.#startNode({ nodeLabel: "", productName: "Test Bridge" }, async (device) => {
             await device.add(aggregator);
-            const addLight = (number: number) =>
-                aggregator.add(
-                    new Endpoint(OnOffLightDevice.with(BridgedDeviceBasicInformationServer), {
-                        id: `light-${number}`,
-                        bridgedDeviceBasicInformation: {
-                            nodeLabel: `Bridged light ${number}`,
-                            productName: "Bridged Light",
-                            uniqueId: `light-${number}`,
-                            reachable: true,
-                        },
-                    }),
-                );
             // One after the other, so that the endpoint numbers follow the order.
-            await addLight(1);
-            await addLight(2);
+            await addLight("light-1", undefined, false);
+            await addLight("light-2", undefined, false);
         });
+        return { ...started, addLight, addStrip };
     }
 
     async #startNode(

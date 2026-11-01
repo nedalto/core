@@ -52,4 +52,8 @@ export class MemoryEndpointRepository implements EndpointRepository {
     setRoom(_id: EndpointId, _roomId: RoomId | null): never {
         throw new Error("Unexpected call");
     }
+
+    delete(_id: EndpointId): never {
+        throw new Error("Unexpected call");
+    }
 }

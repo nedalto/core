@@ -1,5 +1,6 @@
+import type { Unsubscribe } from "../common/bus.ts";
 import type { NodeId } from "../common/ids.ts";
-import type { CommissioningResult, NodeInfo, NodeRecord } from "./types.ts";
+import type { CommissioningResult, EndpointChanges, NodeInfo, NodeRecord } from "./types.ts";
 
 /** Persistence of nodes. */
 export interface NodeRepository {
@@ -47,4 +48,27 @@ export interface NodeGateway {
 
     /** Throws `NodeNotFoundError` for an unknown node. */
     getInfo(nodeId: NodeId): NodeInfo;
+
+    /**
+     * Registers the endpoints the device gained and forgets those it lost, compared by Matter endpoint number, and
+     * returns both.
+     * It stores nothing: persisting the result is up to the caller.
+     * While the structure of the node is not known yet, nothing changes: `onStructureChanged` tells when it is.
+     *
+     * Throws `NodeNotFoundError` for an unknown node.
+     */
+    reconcileEndpoints(nodeId: NodeId): EndpointChanges;
+
+    /**
+     * Calls `listener` with a node whose endpoints may no longer match those registered for it, which
+     * `reconcileEndpoints` settles.
+     * Removing a node is not such a change, whoever removes it.
+     */
+    onStructureChanged(listener: (nodeId: NodeId) => void): Unsubscribe;
+
+    /**
+     * Calls `listener` with a node that left without `decommission`, once it is forgotten here: persisting that is up
+     * to the caller.
+     */
+    onNodeDeleted(listener: (nodeId: NodeId) => void): Unsubscribe;
 }

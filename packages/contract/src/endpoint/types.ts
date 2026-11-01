@@ -17,6 +17,9 @@ export interface EndpointState {
     readonly id: EndpointId;
     readonly nodeId: NodeId;
 
+    /** The endpoint this one hangs from, or `null` when it hangs from the root of the node. */
+    readonly parentId: EndpointId | null;
+
     /** The Matter device type id. */
     readonly deviceType: number;
     readonly name: string;
@@ -48,6 +51,9 @@ export interface ClusterState {
 
 /** What the Matter network knows about an endpoint. */
 export interface EndpointShape {
+    /** The endpoint this one hangs from, or `null` when it hangs from the root of the node. */
+    readonly parentId: EndpointId | null;
+
     /** The Matter device type id. */
     readonly deviceType: number;
     readonly clusters: readonly ClusterState[];

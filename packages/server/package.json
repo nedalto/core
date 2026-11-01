@@ -10,6 +10,7 @@
   },
   "type": "module",
   "exports": {
+    "./device-sync.ts": "./src/device-sync.ts",
     "./server.ts": "./src/server.ts"
   },
   "scripts": {

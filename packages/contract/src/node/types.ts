@@ -1,4 +1,4 @@
-import type { NodeId } from "../common/ids.ts";
+import type { EndpointId, NodeId } from "../common/ids.ts";
 import type { EndpointRecord } from "../endpoint/types.ts";
 
 /** What is stored for a node. */
@@ -43,4 +43,10 @@ export interface NodeInfo {
 export interface CommissioningResult {
     readonly node: NodeRecord;
     readonly endpoints: readonly EndpointRecord[];
+}
+
+/** How the endpoints of a node differ from those the hub had registered for it. */
+export interface EndpointChanges {
+    readonly added: readonly EndpointRecord[];
+    readonly removed: readonly EndpointId[];
 }

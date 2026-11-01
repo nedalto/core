@@ -12,7 +12,7 @@ Packages import only `@nedalto/contract` subpaths (enforced by oxlint); `apps/hu
 - `packages/logger`: opens the log streams (application and Matter) and writes the application log.
 - `packages/database`: SQLite persistence with `node:sqlite`: queries and writes.
 - `packages/matter`: Matter controller: commissioning and talking to devices.
-- `packages/server`: the client API: JSON-RPC over WebSocket, handlers, use cases and views.
+- `packages/server`: the client API: JSON-RPC over WebSocket, handlers, use cases and views; it also keeps `hub.db` up to date with the devices.
 - `apps/hub`: the executable; composes the packages and owns the event bus.
 
 ## Verification
@@ -54,7 +54,7 @@ npm run --workspace=@nedalto/hub e2e
 ## Design
 
 - Simplest thing first.
-  An abstraction, layer, port or package must solve a problem that exists today.
+  A mechanism, abstraction, layer, port or package must solve a problem that exists today, and of two solutions that cover the same cases, take the one with fewer moving parts.
 - Do not generalize from a single case.
 - Validate at the boundaries (client messages, configuration, devices); inside, trust the types.
 - Prefer documenting a decision over defensive code for cases that cannot happen.

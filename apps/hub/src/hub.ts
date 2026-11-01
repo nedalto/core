@@ -10,6 +10,7 @@ import { createSqliteDatabase } from "@nedalto/database/database.ts";
 import { createRotatingLogFile } from "@nedalto/logger/log-file.ts";
 import { createLogger } from "@nedalto/logger/logger.ts";
 import { createMatterController } from "@nedalto/matter/matter.ts";
+import { createDeviceSync } from "@nedalto/server/device-sync.ts";
 import { createHttpServer } from "@nedalto/server/server.ts";
 
 import { createSyncEventBus } from "./bus.ts";
@@ -80,6 +81,19 @@ export class Hub implements Lifecycle {
                 },
                 { ...matterConfig, logLevel: loggerConfig.level, version: this.#version },
             ),
+        );
+        // Before the server, so that a client that subscribes finds `hub.db` settled with what the controller holds.
+        await this.#launch(
+            this.#services,
+            createDeviceSync({
+                logger,
+                nodeRepository: database.node,
+                endpointRepository: database.endpoint,
+                transactor: database.transactor,
+                nodeGateway: matter.node,
+                endpointGateway: matter.endpoint,
+                bus,
+            }),
         );
         await this.#launch(
             this.#services,

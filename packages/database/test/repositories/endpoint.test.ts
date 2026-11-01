@@ -126,6 +126,34 @@ describe("SqliteEndpointRepository", () => {
         assert.equal(endpoint.findById(record.id)?.roomId, null);
     });
 
+    test("delete removes the endpoint and leaves its node and the other endpoints alone", async (context) => {
+        const { node, endpoint } = await openDatabase(context);
+        const nodeId = createNodeId();
+        node.save({ id: nodeId, matterId: 1n });
+        const removed = endpointOf(nodeId, 1);
+        const kept = endpointOf(nodeId, 2);
+        endpoint.save(removed);
+        endpoint.save(kept);
+
+        endpoint.delete(removed.id);
+
+        assert.deepEqual(endpoint.findByNode(nodeId), [kept]);
+        assert.deepEqual(node.findById(nodeId), { id: nodeId, matterId: 1n });
+    });
+
+    test("delete throws EndpointNotFoundError for an unknown id", async (context) => {
+        const { endpoint } = await openDatabase(context);
+        const id = createEndpointId();
+
+        assert.throws(
+            () => endpoint.delete(id),
+            (error) =>
+                error instanceof EndpointNotFoundError &&
+                error.code === "NOT_FOUND_ERROR" &&
+                error.data?.endpointId === id,
+        );
+    });
+
     test("setName throws EndpointNotFoundError for an unknown id", async (context) => {
         const { endpoint } = await openDatabase(context);
         const id = createEndpointId();

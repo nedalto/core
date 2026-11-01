@@ -1,8 +1,20 @@
 import type { EndpointId, RoomId } from "../common/ids.ts";
-import type { AttributeValue } from "./types.ts";
+import type { AttributeValue, EndpointState } from "./types.ts";
 
 /** Events about endpoints. Names follow `<subject>:<verb-past-tense>`. */
 export interface EndpointEvents {
+    /** A node that was already in the hub gained an endpoint. */
+    "endpoint:added": {
+        readonly endpoint: EndpointState;
+        readonly timestamp: number;
+    };
+
+    /** A node that stays in the hub lost an endpoint, and the endpoint its name and room. */
+    "endpoint:removed": {
+        readonly endpointId: EndpointId;
+        readonly timestamp: number;
+    };
+
     /** An attribute of the endpoint took a new value. */
     "endpoint:changed": {
         readonly endpointId: EndpointId;

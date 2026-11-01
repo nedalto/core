@@ -27,6 +27,7 @@ export function composeEndpoint(
     return {
         id: record.id,
         nodeId: record.nodeId,
+        parentId: shape.parentId,
         deviceType: shape.deviceType,
         name: record.name,
         roomId: record.roomId,

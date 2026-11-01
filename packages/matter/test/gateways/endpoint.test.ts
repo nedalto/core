@@ -5,7 +5,7 @@ import { describe, type TestContext, test } from "node:test";
 import { Status } from "@matter/main/types";
 
 import { ValidationError } from "@nedalto/contract/common/errors.ts";
-import { createEndpointId, type EndpointId } from "@nedalto/contract/common/ids.ts";
+import { createEndpointId, createNodeId, type EndpointId } from "@nedalto/contract/common/ids.ts";
 import {
     AttributeNotFoundError,
     CommandNotFoundError,
@@ -15,7 +15,12 @@ import {
 import type { EndpointGateway } from "@nedalto/contract/endpoint/ports.ts";
 import type { AttributeValue } from "@nedalto/contract/endpoint/types.ts";
 
-import { TestNetwork } from "../helpers/network.ts";
+import { MatterEndpointGateway } from "../../src/gateways/endpoint.ts";
+import { MatterNodeGateway } from "../../src/gateways/node.ts";
+import { Identity } from "../../src/identity.ts";
+import { RecordingBus } from "../helpers/bus.ts";
+import { RecordingLogger } from "../helpers/logger.ts";
+import { nextChanges, TestNetwork } from "../helpers/network.ts";
 
 const ON_OFF = 0x06;
 const ON_OFF_ATTRIBUTE = 0x0000;
@@ -358,5 +363,115 @@ describe("MatterEndpointGateway", () => {
         const lastLight = nested.at(-1);
         assert.ok(lastLight !== undefined);
         assert.equal(await controller.endpoint.read(lastLight.id, ON_OFF, ON_OFF_ATTRIBUTE), false);
+    });
+
+    test("announces the changes of a light that the bridge gains while running", async (t) => {
+        const network = new TestNetwork(t);
+        const bridge = await network.startBridge();
+        const { controller, bus } = await network.startController();
+        await controller.node.commission(bridge.manualCode);
+        const gained = nextChanges(controller.node, ({ added: [record] }) => record);
+        await bridge.addLight("light-3");
+        const record = await gained;
+        assert.ok(record !== undefined);
+        const changed = bus.next("endpoint:changed", ({ attributeId }) => attributeId === ON_OFF_ATTRIBUTE);
+
+        await controller.endpoint.invoke(record.id, ON_OFF, OFF_COMMAND);
+
+        const { endpointId, value } = await changed;
+        assert.equal(endpointId, record.id);
+        assert.equal(value, false);
+    });
+
+    test("announces the changes of a registered endpoint that reaches the SDK only after it was registered", async (t) => {
+        const network = new TestNetwork(t);
+        const { manualCode } = await network.startDevice();
+        // Without the initial read, the SDK has no endpoint of the device until it subscribes.
+        const peer = await network.peer(manualCode, { autoStateInitialize: false, autoSubscribe: false });
+        const logger = new RecordingLogger();
+        const bus = new RecordingBus();
+        const identity = new Identity(logger);
+        const nodeGateway = new MatterNodeGateway(logger, bus, identity, peer.owner);
+        const endpointGateway = new MatterEndpointGateway(bus, identity);
+        const nodeId = createNodeId();
+        const light = { id: createEndpointId(), nodeId, matterNumber: 1, name: "Light", roomId: null };
+        identity.add(nodeId, peer, [light]);
+        const present = new Promise<void>((resolve) => {
+            nodeGateway.onStructureChanged((id) => {
+                nodeGateway.reconcileEndpoints(id);
+                if (peer.lifecycle.isSeeded) {
+                    resolve();
+                }
+            });
+        });
+
+        await peer.set({ network: { autoSubscribe: true } });
+        await present;
+        const changed = bus.next("endpoint:changed", ({ endpointId }) => endpointId === light.id);
+        await endpointGateway.invoke(light.id, ON_OFF, ON_COMMAND);
+
+        assert.equal((await changed).value, true);
+        nodeGateway.close();
+        endpointGateway.close();
+    });
+
+    test("stops observing the attributes of an endpoint that the bridge loses", async (t) => {
+        const network = new TestNetwork(t);
+        const bridge = await network.startBridge();
+        const light = await bridge.addLight("light-3");
+        const peer = await network.peer(bridge.manualCode);
+        const logger = new RecordingLogger();
+        const bus = new RecordingBus();
+        const identity = new Identity(logger);
+        const nodeGateway = new MatterNodeGateway(logger, bus, identity, peer.owner);
+        const endpointGateway = new MatterEndpointGateway(bus, identity);
+        t.after(() => {
+            nodeGateway.close();
+            endpointGateway.close();
+        });
+        const nodeId = createNodeId();
+        identity.add(nodeId, peer, []);
+        nodeGateway.reconcileEndpoints(nodeId);
+        const changed = peer.endpoints.for(light.number).eventsOf("onOff")["onOff$Changed"];
+        assert.ok(changed !== undefined);
+        assert.equal(changed.isObserved, true);
+        const lost = nextChanges(nodeGateway, ({ removed }) => removed);
+
+        await light.delete();
+
+        assert.equal((await lost).length, 1);
+        assert.equal(changed.isObserved, false);
+    });
+
+    test("describe names the aggregator as the parent of a bridged light, and none for the aggregator", async (t) => {
+        const network = new TestNetwork(t);
+        const { manualCode } = await network.startBridge();
+        const { controller } = await network.startController();
+        const { endpoints } = await controller.node.commission(manualCode);
+        const [aggregator, ...lights] = endpoints;
+        assert.ok(aggregator !== undefined);
+        assert.equal(lights.length, 2);
+
+        assert.equal(controller.endpoint.describe(aggregator.id).parentId, null);
+        for (const light of lights) {
+            assert.equal(controller.endpoint.describe(light.id).parentId, aggregator.id);
+        }
+    });
+
+    test("describe names the strip as the parent of its outlets, and the aggregator as the parent of the strip", async (t) => {
+        const network = new TestNetwork(t);
+        const bridge = await network.startBridge();
+        await bridge.addStrip("strip");
+        const { controller } = await network.startController();
+        const { endpoints } = await controller.node.commission(bridge.manualCode);
+        // The aggregator, the two lights, and then the strip with its outlets.
+        const [aggregator, , , strip, ...outlets] = endpoints;
+        assert.ok(aggregator !== undefined && strip !== undefined);
+        assert.equal(outlets.length, 2);
+
+        assert.equal(controller.endpoint.describe(strip.id).parentId, aggregator.id);
+        for (const outlet of outlets) {
+            assert.equal(controller.endpoint.describe(outlet.id).parentId, strip.id);
+        }
     });
 });

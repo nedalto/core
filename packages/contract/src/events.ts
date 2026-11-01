@@ -14,6 +14,8 @@ const eventFlags = {
     "node:removed": true,
     "node:connected": true,
     "node:disconnected": true,
+    "endpoint:added": true,
+    "endpoint:removed": true,
     "endpoint:changed": true,
     "endpoint:renamed": true,
     "endpoint:room-changed": true,

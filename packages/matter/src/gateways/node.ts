@@ -1,8 +1,16 @@
 import "../sdk-config.ts";
+import { ObserverGroup } from "@matter/main";
 import { BasicInformationClient } from "@matter/main/behaviors/basic-information";
-import type { ClientNode, CommissioningClient, ServerNode } from "@matter/main/node";
+import {
+    type ClientNode,
+    type CommissioningClient,
+    type Endpoint,
+    EndpointLifecycle,
+    type ServerNode,
+} from "@matter/main/node";
 import { ManualPairingCodeCodec, type QrCodeData, QrPairingCodeCodec } from "@matter/main/types";
 
+import type { Unsubscribe } from "@nedalto/contract/common/bus.ts";
 import { InternalError, ValidationError } from "@nedalto/contract/common/errors.ts";
 import { createEndpointId, createNodeId, type NodeId } from "@nedalto/contract/common/ids.ts";
 import type { EndpointRecord } from "@nedalto/contract/endpoint/types.ts";
@@ -10,7 +18,7 @@ import type { DomainEventBus } from "@nedalto/contract/events.ts";
 import type { Logger } from "@nedalto/contract/logger/ports.ts";
 import { DecommissioningRejectedError, NodeNotFoundError } from "@nedalto/contract/node/errors.ts";
 import type { NodeGateway } from "@nedalto/contract/node/ports.ts";
-import type { CommissioningResult, NodeInfo } from "@nedalto/contract/node/types.ts";
+import type { CommissioningResult, EndpointChanges, NodeInfo } from "@nedalto/contract/node/types.ts";
 
 import { classifyCommissioningError, classifyDecommissioningError } from "../classify.ts";
 import type { Identity } from "../identity.ts";
@@ -26,6 +34,10 @@ const invalidSetupCode = (message: string, cause?: unknown): ValidationError =>
 /** A trimmed `value`, or `undefined` when it is blank. */
 const nonBlank = (value: string | undefined): string | undefined => value?.trim() || undefined;
 
+// Endpoint 0 is the node's administration, not something to control. `endpoints` indexes the whole tree, unlike `parts`,
+// which holds only the direct children and would miss what a bridge exposes.
+const controllableEndpoints = (node: ClientNode): Endpoint[] => node.endpoints.filter(({ number }) => number !== 0);
+
 /** The `NodeGateway` over the peers of the controller node. */
 export class MatterNodeGateway implements NodeGateway {
     readonly #logger: Logger;
@@ -34,6 +46,9 @@ export class MatterNodeGateway implements NodeGateway {
     readonly #controller: ServerNode;
     readonly #decommissioning = new Set<NodeId>();
     readonly #unobserve: () => void;
+    readonly #peerObservers = new ObserverGroup();
+    readonly #structureListeners = new Set<(nodeId: NodeId) => void>();
+    readonly #deletionListeners = new Set<(nodeId: NodeId) => void>();
 
     constructor(logger: Logger, bus: DomainEventBus, identity: Identity, controller: ServerNode) {
         this.#logger = logger;
@@ -49,12 +64,35 @@ export class MatterNodeGateway implements NodeGateway {
                     this.#bus.emit("node:disconnected", { nodeId, timestamp: Date.now() });
                 }
             });
+            observers.on(node.lifecycle.changed, (change, endpoint) => {
+                if (
+                    (change === EndpointLifecycle.Change.PartsReady || change === EndpointLifecycle.Change.Destroyed) &&
+                    endpoint !== node &&
+                    !this.#isLeaving(nodeId, node)
+                ) {
+                    this.#notify(this.#structureListeners, nodeId);
+                }
+            });
+            observers.on(node.lifecycle.seeded, () => {
+                this.#notify(this.#structureListeners, nodeId);
+            });
+        });
+        // @matter/node 0.18.0: a peer leaves this set when it is destroyed, also while the controller closes, which is
+        // why `close()` comes first.
+        this.#peerObservers.on(controller.peers.deleted, (node) => {
+            const nodeId = this.#identity.nodeIdOf(node);
+            if (nodeId !== undefined && !this.#decommissioning.has(nodeId)) {
+                this.#identity.remove(nodeId);
+                this.#logger.info("the SDK deleted the node", nodeId);
+                this.#notify(this.#deletionListeners, nodeId);
+            }
         });
     }
 
-    /** Stops announcing the nodes' connections. */
+    /** Stops announcing the nodes' connections, structure and deletion. */
     close(): void {
         this.#unobserve();
+        this.#peerObservers.close();
     }
 
     async commission(setupCode: string): Promise<CommissioningResult> {
@@ -72,7 +110,7 @@ export class MatterNodeGateway implements NodeGateway {
         // are already available.
         const nodeId = createNodeId();
         const matterId = this.#matterIdOf(node);
-        const endpoints = this.#endpointRecords(nodeId, node);
+        const endpoints = this.#endpointRecords(nodeId, node, controllableEndpoints(node));
         this.#identity.add(nodeId, node, endpoints);
         this.#logger.info("commissioned node", nodeId, endpoints.length);
         return { node: { id: nodeId, matterId }, endpoints };
@@ -125,6 +163,61 @@ export class MatterNodeGateway implements NodeGateway {
         };
     }
 
+    reconcileEndpoints(nodeId: NodeId): EndpointChanges {
+        const tracked = this.#identity.tracked(nodeId);
+        if (tracked === undefined) {
+            throw new NodeNotFoundError(nodeId);
+        }
+        const { node, endpoints } = tracked;
+        if (!node.lifecycle.isSeeded) {
+            return { added: [], removed: [] };
+        }
+        const registered = new Set(endpoints.values());
+        const removed = [...endpoints]
+            .filter(([, number]) => !node.endpoints.has(number) || node.endpoints.for(number).lifecycle.isGone)
+            .map(([endpointId]) => endpointId);
+        const added = this.#endpointRecords(
+            nodeId,
+            node,
+            // @matter/node 0.18.0: the index of the node holds an endpoint from `installed`, before its state can be
+            // read, and `ClientStructure` installs a parent before the parts it names, so a parent is registered first.
+            controllableEndpoints(node).filter(
+                ({ number, lifecycle }) => !registered.has(number) && lifecycle.isPartsReady && !lifecycle.isGone,
+            ),
+        );
+        this.#identity.update(nodeId, added, removed);
+        if (added.length > 0 || removed.length > 0) {
+            this.#logger.info("the endpoints of the node changed", nodeId, added.length, removed.length);
+        }
+        return { added, removed };
+    }
+
+    onStructureChanged(listener: (nodeId: NodeId) => void): Unsubscribe {
+        this.#structureListeners.add(listener);
+        return () => {
+            this.#structureListeners.delete(listener);
+        };
+    }
+
+    onNodeDeleted(listener: (nodeId: NodeId) => void): Unsubscribe {
+        this.#deletionListeners.add(listener);
+        return () => {
+            this.#deletionListeners.delete(listener);
+        };
+    }
+
+    // @matter/node 0.18.0: `delete()` and `close()` report `destroying` on the node before they destroy its endpoints,
+    // which is taking the node down and not a change of its structure.
+    #isLeaving(nodeId: NodeId, node: ClientNode): boolean {
+        return this.#decommissioning.has(nodeId) || node.lifecycle.isGone;
+    }
+
+    #notify(listeners: ReadonlySet<(nodeId: NodeId) => void>, nodeId: NodeId): void {
+        for (const listener of listeners) {
+            listener(nodeId);
+        }
+    }
+
     #commissioningOptions(setupCode: string): CommissioningClient.CommissioningOptions {
         // @matter/node 0.18.0: `pairingCode` is read as a manual pairing code, so a QR payload is decoded here.
         // The manual code is decoded too, so that a mistyped one is refused before the SDK is reached.
@@ -165,18 +258,15 @@ export class MatterNodeGateway implements NodeGateway {
         return address.nodeId;
     }
 
-    #endpointRecords(nodeId: NodeId, node: ClientNode): EndpointRecord[] {
+    #endpointRecords(nodeId: NodeId, node: ClientNode, endpoints: readonly Endpoint[]): EndpointRecord[] {
         const basic = node.stateOf(BasicInformationClient);
         const name = nonBlank(basic.nodeLabel) ?? nonBlank(basic.productName) ?? "Matter Device";
-        const records: EndpointRecord[] = [];
-        // `endpoints` indexes the whole tree, unlike `parts`, which holds only the direct children and would
-        // miss what a bridge exposes.
-        for (const endpoint of node.endpoints) {
-            // Endpoint 0 is the node's administration, not something to control.
-            if (endpoint.number !== 0) {
-                records.push({ id: createEndpointId(), nodeId, matterNumber: endpoint.number, name, roomId: null });
-            }
-        }
-        return records;
+        return endpoints.map(({ number }) => ({
+            id: createEndpointId(),
+            nodeId,
+            matterNumber: number,
+            name,
+            roomId: null,
+        }));
     }
 }
