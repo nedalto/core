@@ -4,6 +4,7 @@ import type { NodeRecord } from "@nedalto/contract/node/types.ts";
 
 /** What the Matter network knows of a light that is on. */
 export const LIGHT_SHAPE: EndpointShape = {
+    parentId: null,
     deviceType: 0x0100,
     clusters: [{ id: 6, attributes: [{ id: 0, value: true }], acceptedCommands: [0, 1] }],
 };
@@ -23,6 +24,7 @@ export const createLight = (nodeId: NodeId, matterNumber: number, roomId: RoomId
 export const stateOf = (record: EndpointRecord, shape: EndpointShape = LIGHT_SHAPE): EndpointState => ({
     id: record.id,
     nodeId: record.nodeId,
+    parentId: shape.parentId,
     deviceType: shape.deviceType,
     name: record.name,
     roomId: record.roomId,

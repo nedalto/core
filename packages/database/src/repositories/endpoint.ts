@@ -16,6 +16,7 @@ export class SqliteEndpointRepository implements EndpointRepository {
     readonly #insert: StatementSync;
     readonly #updateName: StatementSync;
     readonly #updateRoom: StatementSync;
+    readonly #delete: StatementSync;
 
     constructor(connection: DatabaseSync) {
         this.#findById = connection.prepare(`SELECT ${COLUMNS} FROM endpoints WHERE id = ?`);
@@ -26,6 +27,7 @@ export class SqliteEndpointRepository implements EndpointRepository {
         this.#insert = connection.prepare(`INSERT INTO endpoints (${COLUMNS}) VALUES (?, ?, ?, ?, ?)`);
         this.#updateName = connection.prepare("UPDATE endpoints SET name = ? WHERE id = ?");
         this.#updateRoom = connection.prepare("UPDATE endpoints SET room_id = ? WHERE id = ?");
+        this.#delete = connection.prepare("DELETE FROM endpoints WHERE id = ?");
     }
 
     findById(id: EndpointId): EndpointRecord | null {
@@ -53,6 +55,12 @@ export class SqliteEndpointRepository implements EndpointRepository {
 
     setRoom(id: EndpointId, roomId: RoomId | null): void {
         if (this.#updateRoom.run(roomId, id).changes === 0) {
+            throw new EndpointNotFoundError(id);
+        }
+    }
+
+    delete(id: EndpointId): void {
+        if (this.#delete.run(id).changes === 0) {
             throw new EndpointNotFoundError(id);
         }
     }

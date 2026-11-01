@@ -2,18 +2,23 @@ import "../../src/sdk-config.ts";
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import { VendorId } from "@matter/main";
+import { ObserverGroup, VendorId } from "@matter/main";
+import { EndpointLifecycle } from "@matter/main/node";
 import { CommissioningFlowType, QrPairingCodeCodec } from "@matter/main/types";
 
 import { ValidationError } from "@nedalto/contract/common/errors.ts";
-import { createNodeId } from "@nedalto/contract/common/ids.ts";
+import { createEndpointId, createNodeId } from "@nedalto/contract/common/ids.ts";
+import { EndpointNotFoundError } from "@nedalto/contract/endpoint/errors.ts";
 import { DecommissioningRejectedError, NodeNotFoundError } from "@nedalto/contract/node/errors.ts";
 
 import { MatterNodeGateway } from "../../src/gateways/node.ts";
 import { Identity } from "../../src/identity.ts";
 import { RecordingBus } from "../helpers/bus.ts";
 import { RecordingLogger } from "../helpers/logger.ts";
-import { TestNetwork } from "../helpers/network.ts";
+import { nextChanges, TestNetwork } from "../helpers/network.ts";
+
+const ON_OFF = 0x06;
+const ON_OFF_ATTRIBUTE = 0x0000;
 
 const isInvalidSetupCode =
     (message: RegExp) =>
@@ -254,5 +259,227 @@ describe("MatterNodeGateway", () => {
 
         assert.equal((await connected).nodeId, node.id);
         assert.equal(restarted.controller.node.isReachable(node.id), true);
+    });
+
+    test("announces the node and reconcileEndpoints returns a light the bridge gains, registered and with its state", async (t) => {
+        const network = new TestNetwork(t);
+        const bridge = await network.startBridge();
+        const { controller } = await network.startController();
+        const { node, endpoints } = await controller.node.commission(bridge.manualCode);
+        const notified: unknown[] = [];
+        controller.node.onStructureChanged((nodeId) => notified.push(nodeId));
+        const changed = nextChanges(controller.node, (changes) => ({
+            changes,
+            // Within the notice: a light that is on, so that the value cannot be the default of the SDK.
+            shape: changes.added.map(({ id }) => controller.endpoint.describe(id)),
+        }));
+
+        const light = await bridge.addLight("light-3");
+        const { changes, shape } = await changed;
+
+        assert.deepEqual(changes.removed, []);
+        const [record] = changes.added;
+        assert.ok(record !== undefined);
+        assert.deepEqual(
+            { ...record, id: null },
+            { id: null, nodeId: node.id, matterNumber: light.number, name: endpoints[0]?.name, roomId: null },
+        );
+        const onOff = shape[0]?.clusters.find(({ id }) => id === ON_OFF);
+        assert.deepEqual(onOff?.attributes.find(({ id }) => id === ON_OFF_ATTRIBUTE)?.value, true);
+        assert.ok(new Set(notified).has(node.id));
+        assert.equal(await controller.endpoint.read(record.id, ON_OFF, ON_OFF_ATTRIBUTE), true);
+        // Settled: asking again finds nothing new.
+        assert.deepEqual(controller.node.reconcileEndpoints(node.id), { added: [], removed: [] });
+    });
+
+    test("reconcileEndpoints returns a light the bridge loses, which is then not found", async (t) => {
+        const network = new TestNetwork(t);
+        const bridge = await network.startBridge();
+        const { controller } = await network.startController();
+        const { node } = await controller.node.commission(bridge.manualCode);
+        const added = nextChanges(controller.node, ({ added: [record] }) => record);
+        const light = await bridge.addLight("light-3");
+        const record = await added;
+        assert.ok(record !== undefined);
+        const removed = nextChanges(controller.node, (changes) => changes);
+
+        await light.delete();
+
+        assert.deepEqual(await removed, { added: [], removed: [record.id] });
+        await assert.rejects(controller.endpoint.read(record.id, ON_OFF, ON_OFF_ATTRIBUTE), EndpointNotFoundError);
+        assert.throws(() => controller.endpoint.describe(record.id), EndpointNotFoundError);
+        assert.deepEqual(controller.node.reconcileEndpoints(node.id), { added: [], removed: [] });
+    });
+
+    test("reconcileEndpoints names the strip as the parent of outlets with lower numbers, in each notice", async (t) => {
+        const network = new TestNetwork(t);
+        const bridge = await network.startBridge();
+        const { controller } = await network.startController();
+        await controller.node.commission(bridge.manualCode);
+        const seen = new Map<number, { id: unknown; parentId: unknown }>();
+        const complete = new Promise<void>((resolve) => {
+            controller.node.onStructureChanged((nodeId) => {
+                for (const { id, matterNumber } of controller.node.reconcileEndpoints(nodeId).added) {
+                    seen.set(matterNumber, { id, parentId: controller.endpoint.describe(id).parentId });
+                }
+                if (seen.size === 3) {
+                    resolve();
+                }
+            });
+        });
+
+        await bridge.addStrip("strip", [60, 50, 51]);
+        await complete;
+
+        assert.equal(seen.get(50)?.parentId, seen.get(60)?.id);
+        assert.equal(seen.get(51)?.parentId, seen.get(60)?.id);
+    });
+
+    test("reconcileEndpoints leaves out an endpoint that is installed and not ready yet", async (t) => {
+        const network = new TestNetwork(t);
+        const bridge = await network.startBridge();
+        const peer = await network.peer(bridge.manualCode);
+        const logger = new RecordingLogger();
+        const identity = new Identity(logger);
+        const gateway = new MatterNodeGateway(logger, new RecordingBus(), identity, peer.owner);
+        const nodeId = createNodeId();
+        identity.add(
+            nodeId,
+            peer,
+            [...peer.endpoints]
+                .filter(({ number }) => number !== 0)
+                .map(({ number }) => ({
+                    id: createEndpointId(),
+                    nodeId,
+                    matterNumber: number,
+                    name: "",
+                    roomId: null,
+                })),
+        );
+        const whileInstalling: unknown[] = [];
+        const observers = new ObserverGroup();
+        observers.on(peer.lifecycle.changed, (change, endpoint) => {
+            if (change === EndpointLifecycle.Change.Installed) {
+                assert.equal(peer.endpoints.has(endpoint.number), true);
+                whileInstalling.push(gateway.reconcileEndpoints(nodeId));
+            }
+        });
+        const gained = nextChanges(gateway, ({ added }) => added.length);
+
+        await bridge.addLight("light-3");
+
+        assert.equal(await gained, 1);
+        assert.deepEqual(whileInstalling, [{ added: [], removed: [] }]);
+        observers.close();
+        gateway.close();
+    });
+
+    test("announces no change of structure while the controller stops", async (t) => {
+        const network = new TestNetwork(t);
+        const bridge = await network.startBridge();
+        const { controller } = await network.startController();
+        await controller.node.commission(bridge.manualCode);
+        const notified: unknown[] = [];
+        controller.node.onStructureChanged((nodeId) => notified.push(nodeId));
+        controller.node.onNodeDeleted((nodeId) => notified.push(nodeId));
+
+        await controller.stop();
+
+        assert.deepEqual(notified, []);
+    });
+
+    for (const force of [false, true]) {
+        test(`decommission announces no change of structure and no deletion ${force ? "when forced" : "from the fabric"}`, async (t) => {
+            const network = new TestNetwork(t);
+            const bridge = await network.startBridge();
+            const { controller } = await network.startController();
+            const { node } = await controller.node.commission(bridge.manualCode);
+            const notified: unknown[] = [];
+            controller.node.onStructureChanged((nodeId) => notified.push(nodeId));
+            controller.node.onNodeDeleted((nodeId) => notified.push(nodeId));
+
+            await controller.node.decommission(node.id, force);
+
+            assert.deepEqual(notified, []);
+        });
+    }
+
+    test("announces a node that the SDK deletes and forgets it, with no change of structure", async (t) => {
+        const network = new TestNetwork(t);
+        const bridge = await network.startBridge();
+        const peer = await network.peer(bridge.manualCode);
+        const logger = new RecordingLogger();
+        const identity = new Identity(logger);
+        const gateway = new MatterNodeGateway(logger, new RecordingBus(), identity, peer.owner);
+        const nodeId = createNodeId();
+        const records = [...peer.endpoints]
+            .filter(({ number }) => number !== 0)
+            .map(({ number }) => ({ id: createEndpointId(), nodeId, matterNumber: number, name: "", roomId: null }));
+        identity.add(nodeId, peer, records);
+        const structure: unknown[] = [];
+        const deleted: unknown[] = [];
+        gateway.onStructureChanged((id) => structure.push(id));
+        gateway.onNodeDeleted((id) => deleted.push(id));
+
+        await peer.delete();
+
+        assert.deepEqual(deleted, [nodeId]);
+        assert.deepEqual(structure, []);
+        assert.equal(identity.node(nodeId), undefined);
+        assert.equal(identity.endpoint(records[0]?.id ?? createEndpointId()), undefined);
+        gateway.close();
+    });
+
+    test("reconcileEndpoints throws NodeNotFoundError for an unknown node", async (t) => {
+        const network = new TestNetwork(t);
+        const { controller } = await network.startController();
+
+        assert.throws(() => controller.node.reconcileEndpoints(createNodeId()), NodeNotFoundError);
+    });
+
+    test("reconcileEndpoints after a restart returns what is stored and gone, and what is there and not stored", async (t) => {
+        const network = new TestNetwork(t);
+        const bridge = await network.startBridge();
+        const { node, endpoints, restarted } = await network.commissionAndRestart(bridge.manualCode);
+        const unstored = endpoints.at(-1);
+        assert.ok(unstored !== undefined);
+        restarted.endpointRepository.records.splice(restarted.endpointRepository.records.indexOf(unstored), 1);
+        const ghost = { id: createEndpointId(), nodeId: node.id, matterNumber: 99, name: "Ghost", roomId: null };
+        restarted.endpointRepository.save(ghost);
+
+        await restarted.controller.start();
+        const { added, removed } = restarted.controller.node.reconcileEndpoints(node.id);
+
+        assert.deepEqual(removed, [ghost.id]);
+        assert.deepEqual(
+            added.map(({ matterNumber }) => matterNumber),
+            [unstored.matterNumber],
+        );
+        assert.notEqual(added[0]?.id, unstored.id);
+        assert.throws(() => restarted.controller.endpoint.describe(ghost.id), EndpointNotFoundError);
+    });
+
+    test("reconcileEndpoints leaves a node alone until it is seeded, and the notice of seeded settles it", async (t) => {
+        const network = new TestNetwork(t);
+        const { manualCode } = await network.startDevice();
+        const peer = await network.peer(manualCode, { autoStateInitialize: false, autoSubscribe: false });
+        assert.equal(peer.lifecycle.isSeeded, false);
+        const logger = new RecordingLogger();
+        const identity = new Identity(logger);
+        const gateway = new MatterNodeGateway(logger, new RecordingBus(), identity, peer.owner);
+        const nodeId = createNodeId();
+        const ghost = { id: createEndpointId(), nodeId, matterNumber: 99, name: "Ghost", roomId: null };
+        identity.add(nodeId, peer, [ghost]);
+
+        assert.deepEqual(gateway.reconcileEndpoints(nodeId), { added: [], removed: [] });
+        assert.deepEqual(identity.endpoint(ghost.id), { nodeId, node: peer, number: 99 });
+
+        const settled = nextChanges(gateway, (changes) => changes);
+        await peer.set({ network: { autoSubscribe: true } });
+        const { added, removed } = await settled;
+
+        assert.deepEqual(removed, [ghost.id]);
+        assert.equal(added.length, 1);
+        gateway.close();
     });
 });

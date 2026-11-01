@@ -1,10 +1,11 @@
+import type { Unsubscribe } from "@nedalto/contract/common/bus.ts";
 import type { EndpointId, NodeId } from "@nedalto/contract/common/ids.ts";
 import { EndpointNotFoundError } from "@nedalto/contract/endpoint/errors.ts";
 import type { EndpointGateway } from "@nedalto/contract/endpoint/ports.ts";
 import type { AttributeValue, EndpointShape } from "@nedalto/contract/endpoint/types.ts";
 import { NodeNotFoundError } from "@nedalto/contract/node/errors.ts";
 import type { NodeGateway } from "@nedalto/contract/node/ports.ts";
-import type { CommissioningResult, NodeInfo } from "@nedalto/contract/node/types.ts";
+import type { CommissioningResult, EndpointChanges, NodeInfo } from "@nedalto/contract/node/types.ts";
 
 /** A `NodeGateway` that answers from what a test sets and keeps what it was asked. */
 export class FakeNodeGateway implements NodeGateway {
@@ -21,6 +22,56 @@ export class FakeNodeGateway implements NodeGateway {
     readonly decommissionCalls: { nodeId: NodeId; force: boolean | undefined }[] = [];
     readonly reachable = new Set<NodeId>();
     readonly infos = new Map<NodeId, NodeInfo>();
+
+    /** What `reconcileEndpoints` returns for each node, once; a node with none has no changes, and one in `unknown` throws. */
+    readonly changes = new Map<NodeId, EndpointChanges>();
+    readonly unknown = new Set<NodeId>();
+    readonly reconcileCalls: NodeId[] = [];
+
+    /** Called while the endpoints of a node are reconciled, before the answer is returned. */
+    onReconcile: (() => void) | undefined;
+
+    readonly #structureListeners = new Set<(nodeId: NodeId) => void>();
+    readonly #deletionListeners = new Set<(nodeId: NodeId) => void>();
+
+    /** Tells the listeners that the structure of the node changed. */
+    announceStructureChange(nodeId: NodeId): void {
+        for (const listener of this.#structureListeners) {
+            listener(nodeId);
+        }
+    }
+
+    /** Tells the listeners that the SDK deleted the node. */
+    announceDeletion(nodeId: NodeId): void {
+        for (const listener of this.#deletionListeners) {
+            listener(nodeId);
+        }
+    }
+
+    reconcileEndpoints(nodeId: NodeId): EndpointChanges {
+        this.reconcileCalls.push(nodeId);
+        this.onReconcile?.();
+        if (this.unknown.has(nodeId)) {
+            throw new NodeNotFoundError(nodeId);
+        }
+        const changes = this.changes.get(nodeId) ?? { added: [], removed: [] };
+        this.changes.delete(nodeId);
+        return changes;
+    }
+
+    onStructureChanged(listener: (nodeId: NodeId) => void): Unsubscribe {
+        this.#structureListeners.add(listener);
+        return () => {
+            this.#structureListeners.delete(listener);
+        };
+    }
+
+    onNodeDeleted(listener: (nodeId: NodeId) => void): Unsubscribe {
+        this.#deletionListeners.add(listener);
+        return () => {
+            this.#deletionListeners.delete(listener);
+        };
+    }
 
     commission(setupCode: string): Promise<CommissioningResult> {
         this.commissionCalls.push(setupCode);

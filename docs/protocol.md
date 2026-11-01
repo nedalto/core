@@ -149,16 +149,34 @@ sequenceDiagram
     H-->>C: response: the id of the node
 ```
 
-An endpoint has no removal event of its own.
-With `node:removed`, the client discards the endpoints of that node.
+`endpoint:added` and `endpoint:removed` tell of a change in the structure of a device, such as a bridge that gains or loses a device, whether the hub sees it live, finds it when it starts, or learns it when the device connects again.
+`endpoint:added` carries the endpoint as `node:added` does, with `roomId: null` and the default name.
+They are not sent when a node is commissioned or removed, where `node:added` carries the endpoints and, with `node:removed`, the client discards the endpoints of that node.
+`node:removed` is also sent when the device leaves the fabric by itself, with no request of a client.
+
+An endpoint does not get `endpoint:room-changed` when it is removed: its name and room go with it.
 
 An endpoint does not get `endpoint:room-changed` when its room is removed.
 With `room:removed`, the client sets to `null` the `roomId` of the endpoints that were in that room.
 
-An event can name a node or an endpoint the client does not know, when a commissioning failed after the device joined the fabric; the client ignores it.
+An endpoint does not get `endpoint:changed` before its `endpoint:added` or after its `endpoint:removed`.
+
+An event can name a node or an endpoint the client does not know, when a commissioning failed after the device joined the fabric or an endpoint could not be stored when the device gained it; the client ignores it.
+
+A client ignores an event whose name it does not know.
 
 `reachable: false` does not mean that the node is gone, only that it does not answer now.
 A node stays in `node.list` and in the snapshot, with `reachable: false`, until `node:removed`.
+
+### Reachability of an endpoint
+
+`parentId` is the endpoint that an endpoint hangs from on its device, or `null` when it hangs from the root of the node: a plug of a bridged power strip hangs from the strip, and the strip from the aggregator of the bridge.
+
+A client works out whether an endpoint is reachable from what it already has:
+
+1. If `reachable` of its node is `false`, no endpoint of the node is reachable.
+2. Otherwise, it looks for the first endpoint that has the cluster `0x39` (Bridged Device Basic Information), starting from the endpoint itself and going up through `parentId`, and the attribute `0x11` (Reachable) of that cluster decides.
+3. If none has that cluster, the endpoint is reachable.
 
 ## Versioning
 

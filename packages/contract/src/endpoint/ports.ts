@@ -18,6 +18,9 @@ export interface EndpointRepository {
      * Throws `EndpointNotFoundError` if the endpoint does not exist.
      */
     setRoom(id: EndpointId, roomId: RoomId | null): void;
+
+    /** Throws `EndpointNotFoundError` if the endpoint does not exist. */
+    delete(id: EndpointId): void;
 }
 
 /**

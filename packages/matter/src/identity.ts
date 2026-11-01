@@ -11,6 +11,7 @@ import type { NodeRepository } from "@nedalto/contract/node/ports.ts";
 
 /** An endpoint of an SDK node, by its Matter endpoint number. */
 export interface PeerEndpoint {
+    readonly nodeId: NodeId;
     readonly node: ClientNode;
     readonly number: number;
 }
@@ -20,6 +21,10 @@ export interface TrackedNode {
     readonly nodeId: NodeId;
     readonly node: ClientNode;
     readonly endpoints: ReadonlyMap<EndpointId, number>;
+}
+
+interface RegisteredNode extends TrackedNode {
+    readonly endpoints: Map<EndpointId, number>;
 }
 
 /** Puts the observers of a gateway for a node on `observers`, which `Identity` closes when the node is removed. */
@@ -37,7 +42,7 @@ interface Subscription {
  */
 export class Identity {
     readonly #logger: Logger;
-    readonly #nodes = new Map<NodeId, TrackedNode>();
+    readonly #nodes = new Map<NodeId, RegisteredNode>();
     readonly #endpoints = new Map<EndpointId, PeerEndpoint>();
     readonly #subscriptions = new Set<Subscription>();
 
@@ -49,20 +54,43 @@ export class Identity {
         return this.#nodes.get(nodeId)?.node;
     }
 
+    nodeIdOf(node: ClientNode): NodeId | undefined {
+        for (const tracked of this.#nodes.values()) {
+            if (tracked.node === node) {
+                return tracked.nodeId;
+            }
+        }
+        return undefined;
+    }
+
+    tracked(nodeId: NodeId): TrackedNode | undefined {
+        return this.#nodes.get(nodeId);
+    }
+
     endpoint(endpointId: EndpointId): PeerEndpoint | undefined {
         return this.#endpoints.get(endpointId);
     }
 
+    /** The id registered for the endpoint with Matter endpoint `number` of the node. */
+    endpointIdOf(nodeId: NodeId, number: number): EndpointId | undefined {
+        for (const [endpointId, registered] of this.#nodes.get(nodeId)?.endpoints ?? []) {
+            if (registered === number) {
+                return endpointId;
+            }
+        }
+        return undefined;
+    }
+
     /** Registers the node with its endpoints, and lets each subscription observe it. */
     add(nodeId: NodeId, node: ClientNode, endpoints: readonly EndpointRecord[]): void {
-        const tracked: TrackedNode = {
+        const tracked: RegisteredNode = {
             nodeId,
             node,
             endpoints: new Map(endpoints.map(({ id, matterNumber }) => [id, matterNumber])),
         };
         this.#nodes.set(nodeId, tracked);
         for (const [endpointId, number] of tracked.endpoints) {
-            this.#endpoints.set(endpointId, { node, number });
+            this.#endpoints.set(endpointId, { nodeId, node, number });
         }
         for (const { attach, groups } of this.#subscriptions) {
             const observers = new ObserverGroup();
@@ -87,6 +115,22 @@ export class Identity {
         }
     }
 
+    /** Registers `added` and forgets `removed` on a registered node. */
+    update(nodeId: NodeId, added: readonly EndpointRecord[], removed: readonly EndpointId[]): void {
+        const tracked = this.#nodes.get(nodeId);
+        if (tracked === undefined) {
+            return;
+        }
+        for (const endpointId of removed) {
+            tracked.endpoints.delete(endpointId);
+            this.#endpoints.delete(endpointId);
+        }
+        for (const { id, matterNumber } of added) {
+            tracked.endpoints.set(id, matterNumber);
+            this.#endpoints.set(id, { nodeId, node: tracked.node, number: matterNumber });
+        }
+    }
+
     /**
      * Calls `attach` for each node added from now on.
      * The SDK's observables hand out no unsubscribe handle and a decommissioned node stays alive, so the group
@@ -106,8 +150,8 @@ export class Identity {
     }
 
     /**
-     * Registers each node of the repository that has a peer in the SDK, with the endpoints of the repository
-     * that the peer still has.
+     * Registers each node of the repository that has a peer in the SDK, with all its endpoints of the repository.
+     * Those the peer no longer has, or does not have yet, are for the reconciliation to settle.
      */
     hydrate(peers: Iterable<ClientNode>, nodeRepository: NodeRepository, endpointRepository: EndpointRepository): void {
         const byMatterId = new Map<bigint, ClientNode>();
@@ -124,14 +168,7 @@ export class Identity {
                 this.#logger.warn("persisted node has no Matter peer", record.id);
                 continue;
             }
-            const endpoints = endpointRepository.findByNode(record.id).filter((endpoint) => {
-                const exists = peer.endpoints.has(endpoint.matterNumber);
-                if (!exists) {
-                    this.#logger.warn("persisted endpoint has no Matter endpoint", endpoint.id);
-                }
-                return exists;
-            });
-            this.add(record.id, peer, endpoints);
+            this.add(record.id, peer, endpointRepository.findByNode(record.id));
         }
     }
 }

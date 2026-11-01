@@ -112,7 +112,7 @@ export class MemoryNodeRepository implements NodeRepository {
 /** An `EndpointRepository` in memory, which a test can make fail or observe. */
 export class MemoryEndpointRepository implements EndpointRepository {
     readonly records = new Map<EndpointId, EndpointRecord>();
-    readonly failures = new Failures<"findById" | "findAll" | "save" | "setName" | "setRoom">();
+    readonly failures = new Failures<"findById" | "findAll" | "save" | "setName" | "setRoom" | "delete">();
 
     /** Called while an endpoint is saved, before it is stored. */
     onSave: (() => void) | undefined;
@@ -145,6 +145,13 @@ export class MemoryEndpointRepository implements EndpointRepository {
     setRoom(id: EndpointId, roomId: RoomId | null): void {
         this.failures.check("setRoom");
         this.#update(id, { roomId });
+    }
+
+    delete(id: EndpointId): void {
+        this.failures.check("delete");
+        if (!this.records.delete(id)) {
+            throw new EndpointNotFoundError(id);
+        }
     }
 
     #update(id: EndpointId, changes: Partial<EndpointRecord>): void {

@@ -1,11 +1,11 @@
 import "../sdk-config.ts";
 import type { ObserverGroup } from "@matter/main";
-import { type ClientNode, ClusterBehavior, type Endpoint } from "@matter/main/node";
+import { type ClientNode, ClusterBehavior, type Endpoint, EndpointLifecycle } from "@matter/main/node";
 import { Invoke, Read, Write, type WriteResult } from "@matter/main/protocol";
 import { AttributeId, ClusterId, CommandId, EndpointNumber, Status, TlvOfModel } from "@matter/main/types";
 
 import { IntegrationError, ValidationError, type ValidationIssue } from "@nedalto/contract/common/errors.ts";
-import type { EndpointId } from "@nedalto/contract/common/ids.ts";
+import type { EndpointId, NodeId } from "@nedalto/contract/common/ids.ts";
 import {
     AttributeNotFoundError,
     CommandNotFoundError,
@@ -17,7 +17,7 @@ import type { DomainEventBus } from "@nedalto/contract/events.ts";
 
 import { classifyAttributeStatus, classifyCommandStatus, classifyInteractionError } from "../classify.ts";
 import { findSpecAttribute, findSpecCommand } from "../clusters.ts";
-import type { Identity, TrackedNode } from "../identity.ts";
+import type { Identity, PeerEndpoint } from "../identity.ts";
 import { normalizeValue } from "../normalize.ts";
 
 type Issue = ValidationIssue & { readonly path: "clusterId" | "attributeId" | "commandId" | "value" | "args" };
@@ -69,8 +69,8 @@ export class MatterEndpointGateway implements EndpointGateway {
     constructor(bus: DomainEventBus, identity: Identity) {
         this.#bus = bus;
         this.#identity = identity;
-        this.#unobserve = identity.observe((observers, tracked) => {
-            this.#observe(observers, tracked);
+        this.#unobserve = identity.observe((observers, { nodeId, node }) => {
+            this.#observe(observers, nodeId, node);
         });
     }
 
@@ -184,7 +184,7 @@ export class MatterEndpointGateway implements EndpointGateway {
     }
 
     describe(endpointId: EndpointId): EndpointShape {
-        const { node, number } = this.#resolve(endpointId);
+        const { nodeId, node, number } = this.#resolve(endpointId);
         // `endpoints` indexes the whole tree, unlike `parts`, which holds only the direct children.
         if (!node.endpoints.has(number)) {
             throw new EndpointNotFoundError(endpointId);
@@ -196,7 +196,8 @@ export class MatterEndpointGateway implements EndpointGateway {
             // @matter/types 0.18.0: `ClusterType.attributes()` leaves the global attributes out of the cluster.
             for (const [name, attribute] of Object.entries(behavior.cluster.attributes ?? {})) {
                 const value = state[name];
-                // An attribute that the device did not report has no value to give.
+                // @matter/node 0.18.0: reading synthesizes the default of a mandatory attribute, even one that the
+                // AttributeList of the peer omits, so only an optional attribute that was not reported has no value.
                 if (value !== undefined) {
                     attributes.push({ id: attribute.id, value: normalizeValue(value) });
                 }
@@ -207,12 +208,22 @@ export class MatterEndpointGateway implements EndpointGateway {
                 acceptedCommands: [...endpoint.globalsOf(behavior.id).acceptedCommandList],
             };
         });
-        return { deviceType: endpoint.type.deviceType, clusters };
+        // The root is not registered, so what hangs from it has no parent to name.
+        const parentId = endpoint.owner && this.#identity.endpointIdOf(nodeId, endpoint.owner.number);
+        return { parentId: parentId ?? null, deviceType: endpoint.type.deviceType, clusters };
     }
 
-    #observe(observers: ObserverGroup, { node, endpoints }: TrackedNode): void {
-        for (const [endpointId, number] of endpoints) {
-            const endpoint = node.endpoints.for(number);
+    // Every endpoint of the node is observed, also one not registered yet, and its id is looked up when an attribute
+    // changes: an endpoint is announced from when the reconciliation registers it until it forgets it.
+    #observe(observers: ObserverGroup, nodeId: NodeId, node: ClientNode): void {
+        // What stops observing each endpoint, so that the group of the node does not keep one the device removed.
+        const observed = new Map<Endpoint, (() => void)[]>();
+        const observe = (endpoint: Endpoint): void => {
+            // Endpoint 0 is the node's administration, which is never registered.
+            if (endpoint.number === 0 || observed.has(endpoint)) {
+                return;
+            }
+            const unobserves: (() => void)[] = [];
             for (const behavior of clusterBehaviors(endpoint)) {
                 const events = endpoint.eventsOf(behavior.id);
                 for (const [name, attribute] of Object.entries(behavior.cluster.attributes ?? {})) {
@@ -222,7 +233,11 @@ export class MatterEndpointGateway implements EndpointGateway {
                     }
                     // @matter/node 0.18.0: `eventsOf(string)` types its observables without arguments, but an
                     // attribute's `$Changed` passes the new value first, then the old one and the context.
-                    observers.on(changed, (...[value]: unknown[]) => {
+                    const announce = (...[value]: unknown[]): void => {
+                        const endpointId = this.#identity.endpointIdOf(nodeId, endpoint.number);
+                        if (endpointId === undefined) {
+                            return;
+                        }
                         this.#bus.emit("endpoint:changed", {
                             endpointId,
                             clusterId: behavior.cluster.id,
@@ -230,13 +245,32 @@ export class MatterEndpointGateway implements EndpointGateway {
                             value: normalizeValue(value),
                             timestamp: Date.now(),
                         });
-                    });
+                    };
+                    observers.on(changed, announce);
+                    unobserves.push(() => observers.off(changed, announce));
                 }
             }
+            observed.set(endpoint, unobserves);
+        };
+        for (const endpoint of node.endpoints) {
+            observe(endpoint);
         }
+        // @matter/node 0.18.0: the changes of the lifecycle of every endpoint bubble up to the root of the node; an
+        // endpoint the device adds is `partsReady` once built, and `partsReady` again after a reset.
+        // @matter/general 0.18.0: `ObserverGroup` holds its observers until it is closed, which is when the node goes.
+        observers.on(node.lifecycle.changed, (change, endpoint) => {
+            if (change === EndpointLifecycle.Change.PartsReady) {
+                observe(endpoint);
+            } else if (change === EndpointLifecycle.Change.Destroyed) {
+                for (const unobserve of observed.get(endpoint) ?? []) {
+                    unobserve();
+                }
+                observed.delete(endpoint);
+            }
+        });
     }
 
-    #resolve(endpointId: EndpointId): { node: ClientNode; number: number } {
+    #resolve(endpointId: EndpointId): PeerEndpoint {
         const peer = this.#identity.endpoint(endpointId);
         if (peer === undefined) {
             throw new EndpointNotFoundError(endpointId);

@@ -3,8 +3,7 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
 import { InternalError } from "@nedalto/contract/common/errors.ts";
-import { createEndpointId, createNodeId } from "@nedalto/contract/common/ids.ts";
-import { EndpointNotFoundError } from "@nedalto/contract/endpoint/errors.ts";
+import { createNodeId } from "@nedalto/contract/common/ids.ts";
 import { NodeNotFoundError } from "@nedalto/contract/node/errors.ts";
 
 import { TestNetwork } from "./helpers/network.ts";
@@ -94,24 +93,5 @@ describe("MatterController", () => {
         await restarted.controller.endpoint.invoke(light.id, ON_OFF, ON_COMMAND);
 
         assert.deepEqual((await changed).endpointId, light.id);
-    });
-
-    test("start() warns about an endpoint of the repository that the node lacks, and does not register it", async (t) => {
-        const network = new TestNetwork(t);
-        const { manualCode } = await network.startDevice();
-        const { node, endpoints, restarted } = await network.commissionAndRestart(manualCode);
-        const [light] = endpoints;
-        assert.ok(light !== undefined);
-        const ghost = { id: createEndpointId(), nodeId: node.id, matterNumber: 99, name: "Ghost", roomId: null };
-        restarted.endpointRepository.save(ghost);
-
-        await restarted.controller.start();
-
-        assert.deepEqual(restarted.logger.warnings, [["persisted endpoint has no Matter endpoint", ghost.id]]);
-        await assert.rejects(
-            restarted.controller.endpoint.read(ghost.id, ON_OFF, ON_OFF_ATTRIBUTE),
-            EndpointNotFoundError,
-        );
-        assert.equal(await restarted.controller.endpoint.read(light.id, ON_OFF, ON_OFF_ATTRIBUTE), false);
     });
 });

@@ -14,6 +14,8 @@ class SyncEventBus implements DomainEventBus {
         "node:removed": new Set(),
         "node:connected": new Set(),
         "node:disconnected": new Set(),
+        "endpoint:added": new Set(),
+        "endpoint:removed": new Set(),
         "endpoint:changed": new Set(),
         "endpoint:renamed": new Set(),
         "endpoint:room-changed": new Set(),
