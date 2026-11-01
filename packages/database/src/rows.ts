@@ -22,13 +22,13 @@ export const toRoomRecord = (row: Row): RoomRecord => ({
 });
 
 /**
- * Node 26.10: a bigint of 2^63 or more cannot be bound, so a Matter node id (a uint64) is stored
+ * Node 26.13: a bigint of 2^63 or more cannot be bound, so a Matter node id (a uint64) is stored
  * as the signed int64 with the same bits. `toNodeRecord` converts it back.
  */
 export const toStoredMatterId = (matterId: bigint): bigint => BigInt.asIntN(64, matterId);
 
 /**
- * The row must come from a statement prepared with `readBigInts`: Node 26.10 reads an INTEGER as
+ * The row must come from a statement prepared with `readBigInts`: Node 26.13 reads an INTEGER as
  * a number otherwise, and throws past 2^53.
  */
 export const toNodeRecord = (row: Row): NodeRecord => ({

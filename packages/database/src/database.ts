@@ -63,7 +63,7 @@ class SqliteDatabase implements Database {
     async start(): Promise<void> {
         const connection = new DatabaseSync(this.#filePath);
 
-        // Set explicitly although Node 26.10 already defaults foreign_keys to ON and synchronous to
+        // Set explicitly although Node 26.13 already defaults foreign_keys to ON and synchronous to
         // FULL: the cascades depend on the first, and FULL is chosen over NORMAL because a commit
         // lost to a power cut can leave a device holding a fabric nothing here records.
         connection.exec("PRAGMA journal_mode = WAL;");

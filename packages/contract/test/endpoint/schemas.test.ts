@@ -78,7 +78,7 @@ describe("validateWriteParams", () => {
     });
 
     test("returns a value nested as deep as a decoded message can be", () => {
-        // Node 26.10: `decode` throws a RangeError at about 2500 levels, so no deeper value reaches here.
+        // Node 26.13: `decode` throws a RangeError at about 2500 levels, so no deeper value reaches here.
         const value = decode("[".repeat(2000) + "]".repeat(2000));
 
         assert.doesNotThrow(() => validateWriteParams({ ...base, value }));

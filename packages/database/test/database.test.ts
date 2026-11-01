@@ -63,7 +63,7 @@ describe("createSqliteDatabase", () => {
 
         await database.stop();
 
-        // Node 26.10: SQLite removes the write-ahead log when the last connection to the file closes.
+        // Node 26.13: SQLite removes the write-ahead log when the last connection to the file closes.
         assert.equal(existsSync(`${path}-wal`), false);
     });
 
