@@ -9,10 +9,14 @@ import {
     UnreachableError,
     ValidationError,
 } from "@nedalto/contract/common/errors.ts";
+import { createEndpointId } from "@nedalto/contract/common/ids.ts";
 import { encode } from "@nedalto/contract/common/wire.ts";
+import { InteractionRejectedError } from "@nedalto/contract/endpoint/errors.ts";
+import { CommissioningFailedError } from "@nedalto/contract/node/errors.ts";
 import { JsonRpcErrorCode } from "@nedalto/contract/server/types.ts";
 
-import { isUnexpected, parseClientMessage, toJsonRpcError } from "../src/wire.ts";
+import { logRequestFailure, parseClientMessage, toJsonRpcError } from "../src/wire.ts";
+import { RecordingLogger } from "./helpers/logger.ts";
 
 describe("parseClientMessage", () => {
     test("returns a request when the message has an id", () => {
@@ -126,15 +130,107 @@ describe("toJsonRpcError", () => {
     });
 });
 
-describe("isUnexpected", () => {
-    test("is true for an InternalError and for what is not an AppError", () => {
-        assert.equal(isUnexpected(new InternalError("bug")), true);
-        assert.equal(isUnexpected(new TypeError("bug")), true);
-        assert.equal(isUnexpected("bug"), true);
+describe("logRequestFailure", () => {
+    const METHOD = "node.commission";
+    const CAUSE = new RangeError("no device answered");
+
+    function logged(error: unknown): RecordingLogger {
+        const logger = new RecordingLogger();
+        logRequestFailure(logger, METHOD, error);
+        return logger;
+    }
+
+    test("writes at error what is not an AppError and an InternalError, with the error", () => {
+        for (const error of [new TypeError("bug"), "bug", new InternalError("bug", { cause: CAUSE })]) {
+            assert.deepEqual(logged(error).calls, [
+                { level: "error", values: ["handler failed unexpectedly", METHOD, error] },
+            ]);
+        }
     });
 
-    test("is false for the other AppErrors", () => {
-        assert.equal(isUnexpected(new NotFoundError("no")), false);
-        assert.equal(isUnexpected(new ValidationError("no", { issues: [] })), false);
+    test("writes at warn the whole error for an IntegrationError of the base class", () => {
+        for (const error of [
+            new IntegrationError("Commissioning failed", { cause: CAUSE }),
+            new IntegrationError("no"),
+        ]) {
+            assert.deepEqual(logged(error).calls, [{ level: "warn", values: ["request failed", METHOD, error] }]);
+        }
+    });
+
+    test("writes at info the code, message, data and cause of a subclass of IntegrationError", () => {
+        const error = new CommissioningFailedError("not-found", CAUSE);
+
+        assert.deepEqual(logged(error).calls, [
+            {
+                level: "info",
+                values: [
+                    "request failed",
+                    METHOD,
+                    "INTEGRATION_ERROR",
+                    "Commissioning failed: not-found",
+                    { reason: "not-found" },
+                    "cause:",
+                    "RangeError: no device answered",
+                ],
+            },
+        ]);
+    });
+
+    test("writes at info any other error with a cause, leaving out the data it does not have", () => {
+        const error = new ConflictError("Taken", { cause: CAUSE });
+
+        assert.deepEqual(logged(error).calls, [
+            {
+                level: "info",
+                values: [
+                    "request failed",
+                    METHOD,
+                    "CONFLICT_ERROR",
+                    "Taken",
+                    "cause:",
+                    "RangeError: no device answered",
+                ],
+            },
+        ]);
+    });
+
+    test("writes at info an error the device decided, without the cause it does not have", () => {
+        const error = new InteractionRejectedError(createEndpointId(), 6, { commandId: 1 }, 0x87);
+
+        assert.deepEqual(logged(error).calls, [
+            { level: "info", values: ["request failed", METHOD, "INTEGRATION_ERROR", error.message, error.data] },
+        ]);
+    });
+
+    test("writes as text a cause that is not an Error", () => {
+        const [call] = logged(new UnreachableError("Asleep", { cause: 42 })).calls;
+
+        assert.deepEqual(call?.values.slice(-2), ["cause:", "42"]);
+    });
+
+    test("names a cause by its class when its name is that of Error, as those of the SDK are", () => {
+        class DeviceGoneError extends Error {}
+        const [call] = logged(new UnreachableError("Asleep", { cause: new DeviceGoneError("gone") })).calls;
+
+        assert.deepEqual(call?.values.slice(-2), ["cause:", "DeviceGoneError: gone"]);
+    });
+
+    test("writes only the direct cause, without going down the chain", () => {
+        const direct = new Error("direct", { cause: new Error("deeper") });
+        const [call] = logged(new UnreachableError("Asleep", { cause: direct })).calls;
+
+        assert.deepEqual(call?.values.slice(-2), ["cause:", "Error: direct"]);
+    });
+
+    test("writes nothing for a ValidationError, even with a cause", () => {
+        const error = new ValidationError("Invalid input", { cause: CAUSE, issues: [] });
+
+        assert.deepEqual(logged(error).calls, []);
+    });
+
+    test("writes nothing for the checks of the hub itself, which have no cause", () => {
+        for (const error of [new NotFoundError("No such room"), new ConflictError("Taken")]) {
+            assert.deepEqual(logged(error).calls, []);
+        }
     });
 });

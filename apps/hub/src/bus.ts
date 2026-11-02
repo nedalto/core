@@ -52,6 +52,7 @@ class SyncEventBus implements DomainEventBus {
 
 /**
  * A `DomainEventBus` that delivers an event to every handler before `emit` returns, and logs the handlers that
- * throw, with `logger`. See `docs/decisions/0005-synchronous-in-process-event-bus.md`.
+ * throw, with `logger`.
+ * See `docs/decisions/0005-synchronous-in-process-event-bus.md`.
  */
 export const createSyncEventBus = (logger: Logger): DomainEventBus => new SyncEventBus(logger.get("EventBus"));

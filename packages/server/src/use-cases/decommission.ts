@@ -48,8 +48,11 @@ export class DecommissionUseCase {
         } catch (error) {
             // Not found: a decommissioning of the same node that ran alongside this one deleted it first.
             if (!(error instanceof NodeNotFoundError)) {
-                // The fabric no longer holds the node, so a retry deletes it from the database only.
-                this.#logger.error("node left the fabric but could not be deleted", id, error);
+                // Without the error: whoever answers the request logs it.
+                this.#logger.warn(
+                    "node left the fabric but could not be deleted, a retry deletes it from the database only",
+                    id,
+                );
             }
             throw error;
         }

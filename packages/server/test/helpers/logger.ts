@@ -1,6 +1,6 @@
 import type { Logger } from "@nedalto/contract/logger/ports.ts";
 
-type Level = "debug" | "notice" | "warn" | "error";
+type Level = "debug" | "info" | "notice" | "warn" | "error";
 
 /** A `Logger` that keeps what the package writes at each level. */
 export class RecordingLogger implements Logger {
@@ -8,6 +8,10 @@ export class RecordingLogger implements Logger {
 
     debug(...values: unknown[]): void {
         this.calls.push({ level: "debug", values });
+    }
+
+    info(...values: unknown[]): void {
+        this.calls.push({ level: "info", values });
     }
 
     notice(...values: unknown[]): void {
@@ -24,10 +28,6 @@ export class RecordingLogger implements Logger {
 
     get(): Logger {
         return this;
-    }
-
-    info(): never {
-        throw new Error("Unexpected call");
     }
 
     fatal(): never {

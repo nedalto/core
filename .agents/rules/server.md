@@ -10,3 +10,4 @@ paths:
 - Every use case that emits has a test in which the write fails and no event is emitted.
 - A use case composes and emits `node:added` synchronously, for the same reason as `hub.subscribe`; keep these methods free of `await` between the write and the emit.
 - `node:added` composes endpoint state with the same function `endpoint.get` and `endpoint.list` use, so a client sees one shape.
+- The failure of a request is logged once, by `logRequestFailure`, where it is translated into the response, and that line never carries the `params`; where an error is produced, log only what the client will never see (an error that is swallowed, a second failure that would be lost, or work that does not come from a request).

@@ -76,6 +76,29 @@ describe("createLogger", () => {
         assert.match(sink.only, / INFO App count: 42 \{ key: 'value' \}\n$/);
     });
 
+    test("renders on one line an object that inspect would split at its default width", () => {
+        const sink = new MemorySink();
+        const data = {
+            endpointId: "01a19684-7402-72c9-8faf-0d54d3efe71d",
+            clusterId: 6,
+            attributeId: 16385,
+            status: 135,
+            path: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+        };
+
+        createLogger(sink, LogLevel.Info, "App").info(data);
+
+        assert.match(sink.only, /^[^\n]* \{ endpointId: [^\n]* path: \[ 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 \] \}\n$/);
+    });
+
+    test("renders an object three levels deep, as the issues in the data of an error", () => {
+        const sink = new MemorySink();
+
+        createLogger(sink, LogLevel.Info, "App").info({ data: { issues: [{ path: "server.port" }] } });
+
+        assert.match(sink.only, /\{ data: \{ issues: \[ \{ path: 'server\.port' \} \] \} \}\n$/);
+    });
+
     test("renders an Error with its stack", () => {
         const sink = new MemorySink();
 

@@ -25,12 +25,12 @@ const isInvalidSetupCode =
     (error: unknown): boolean => {
         assert.ok(error instanceof ValidationError);
         assert.equal(error.code, "VALIDATION_ERROR");
-        const issues = error.data?.issues;
-        assert.ok(Array.isArray(issues) && issues.length === 1);
+        const { issues } = error.data;
+        assert.equal(issues.length, 1);
         const [issue] = issues;
-        assert.ok(typeof issue === "object" && issue !== null && !Array.isArray(issue));
+        assert.ok(issue !== undefined);
         assert.equal(issue.path, "setupCode");
-        assert.match(String(issue.message), message);
+        assert.match(issue.message, message);
         return true;
     };
 

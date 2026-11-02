@@ -15,7 +15,8 @@ const SEVERITY = {
 
 const pad = (value: number, width: number): string => String(value).padStart(width, "0");
 
-const render = (value: unknown): string => (typeof value === "string" ? value : inspect(value));
+const render = (value: unknown): string =>
+    typeof value === "string" ? value : inspect(value, { breakLength: Infinity, compact: true, depth: 3 });
 
 function timestamp(date: Date): string {
     const day = `${date.getFullYear()}-${pad(date.getMonth() + 1, 2)}-${pad(date.getDate(), 2)}`;

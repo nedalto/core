@@ -66,7 +66,7 @@ describe("loadConfig", () => {
         );
     });
 
-    test("propagates the schema failure with its issues when the contents are invalid", (context) => {
+    test("throws a ValidationError naming the file, with the issues of the schema, when the contents are invalid", (context) => {
         const filePath = writeConfigFile(context, JSON.stringify({ server: { port: 80 } }));
 
         assert.throws(
@@ -75,6 +75,8 @@ describe("loadConfig", () => {
                 assert.ok(error instanceof ValidationError);
                 assert.equal(error.code, "VALIDATION_ERROR");
                 assert.partialDeepStrictEqual(error.data, { issues: [{ path: "server.port" }] });
+                assert.ok(error.message.includes(filePath));
+                assert.ok(error.cause instanceof ValidationError);
                 return true;
             },
         );

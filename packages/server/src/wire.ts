@@ -1,5 +1,6 @@
-import { AppError, InternalError, ValidationError } from "@nedalto/contract/common/errors.ts";
+import { AppError, IntegrationError, InternalError, ValidationError } from "@nedalto/contract/common/errors.ts";
 import { decode } from "@nedalto/contract/common/wire.ts";
+import type { Logger } from "@nedalto/contract/logger/ports.ts";
 import {
     type JsonRpcError,
     type JsonRpcErrorResponse,
@@ -69,9 +70,31 @@ export function parseClientMessage(text: string): ParseOutcome {
     return { request: message };
 }
 
-/** Whether `error` is a bug, which only the log should hear the details of. */
-export const isUnexpected = (error: unknown): boolean =>
-    !(error instanceof AppError) || error.code === "INTERNAL_ERROR";
+// @matter/general 0.18.0: `MatterError` leaves `name` as "Error", so it is the class that says which error it is.
+const describeCause = (cause: unknown): string =>
+    cause instanceof Error ? `${cause.constructor.name}: ${cause.message}` : String(cause);
+
+/**
+ * Writes the failure of a request, if it is unexpected or the SDK or a device decided it, at the level that says which.
+ * The params of the request are not for this line: they can hold secrets such as a pairing code.
+ * See `docs/decisions/0003-error-model.md`.
+ */
+export function logRequestFailure(logger: Logger, method: string, error: unknown): void {
+    if (!(error instanceof AppError) || error.code === "INTERNAL_ERROR") {
+        logger.error("handler failed unexpectedly", method, error);
+    } else if (error.constructor === IntegrationError) {
+        logger.warn("request failed", method, error);
+    } else if (error.code === "INTEGRATION_ERROR" || (error.code !== "VALIDATION_ERROR" && error.cause !== undefined)) {
+        logger.info(
+            "request failed",
+            method,
+            error.code,
+            error.message,
+            ...(error.data === undefined ? [] : [error.data]),
+            ...(error.cause === undefined ? [] : ["cause:", describeCause(error.cause)]),
+        );
+    }
+}
 
 /** Translates an error thrown while handling a request. */
 export function toJsonRpcError(error: unknown): JsonRpcError {

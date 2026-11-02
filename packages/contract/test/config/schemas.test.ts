@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import { ValidationError } from "../../src/common/errors.ts";
+import { ValidationError, type ValidationIssue } from "../../src/common/errors.ts";
 import { validateConfig } from "../../src/config/schemas.ts";
 import { LogLevel } from "../../src/logger/types.ts";
 
@@ -12,25 +12,20 @@ const DEFAULTS = {
 };
 
 /** The issues of the `ValidationError` that validating `input` throws. */
-function issuesOf(input: unknown): unknown {
+function issuesOf(input: unknown): readonly ValidationIssue[] {
     try {
         validateConfig(input);
     } catch (error) {
         assert.ok(error instanceof ValidationError);
         assert.equal(error.code, "VALIDATION_ERROR");
-        return error.data?.issues;
+        return error.data.issues;
     }
     return assert.fail(`expected ${JSON.stringify(input)} to be rejected`);
 }
 
 /** The path of each issue, to check which field a value was rejected for. */
 function rejectedPaths(input: unknown): unknown[] {
-    const issues = issuesOf(input);
-    assert.ok(Array.isArray(issues));
-    return issues.map((issue) => {
-        assert.ok(typeof issue === "object" && issue !== null && "path" in issue);
-        return issue.path;
-    });
+    return issuesOf(input).map((issue) => issue.path);
 }
 
 describe("validateConfig", () => {

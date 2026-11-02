@@ -10,7 +10,7 @@ import type { SUBSCRIBE_METHOD } from "./methods.ts";
 import type { EndpointView } from "./views/endpoint.ts";
 import type { NodeView } from "./views/node.ts";
 import type { RoomView } from "./views/room.ts";
-import { errorResponse, isUnexpected, notification, successResponse, toJsonRpcError } from "./wire.ts";
+import { errorResponse, logRequestFailure, notification, successResponse, toJsonRpcError } from "./wire.ts";
 
 /** What a client reads, for the snapshot of `hub.subscribe`. */
 export interface Views {
@@ -47,9 +47,7 @@ export class Subscriptions {
             ws.send(encode(successResponse(request.id, snapshot)));
             this.#subscribers.add(ws);
         } catch (error) {
-            if (isUnexpected(error)) {
-                this.#logger.error("handler failed unexpectedly", request.method, error);
-            }
+            logRequestFailure(this.#logger, request.method, error);
             ws.send(encode(errorResponse(request.id, toJsonRpcError(error))));
         }
     }

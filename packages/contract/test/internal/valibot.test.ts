@@ -15,10 +15,7 @@ function issuePaths(input: unknown): unknown[] {
     } catch (error) {
         assert.ok(error instanceof ValidationError);
         assert.equal(error.code, "VALIDATION_ERROR");
-        const issues = error.data?.issues;
-        assert.ok(Array.isArray(issues));
-        return issues.map((issue) => {
-            assert.ok(typeof issue === "object" && issue !== null && "path" in issue);
+        return error.data.issues.map((issue) => {
             assert.equal(typeof issue.message, "string");
             return issue.path;
         });

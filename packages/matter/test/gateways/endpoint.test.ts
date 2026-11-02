@@ -55,12 +55,7 @@ async function commissionLight(t: TestContext) {
 const issuePaths = (error: unknown): unknown[] | undefined => {
     assert.ok(error instanceof ValidationError);
     assert.equal(error.code, "VALIDATION_ERROR");
-    const issues = error.data?.issues;
-    assert.ok(Array.isArray(issues));
-    return issues.map((issue) => {
-        assert.ok(typeof issue === "object" && issue !== null && !Array.isArray(issue));
-        return issue.path;
-    });
+    return error.data.issues.map((issue) => issue.path);
 };
 
 describe("MatterEndpointGateway", () => {
