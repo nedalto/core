@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import { InternalError } from "@nedalto/contract/common/errors.ts";
+import { InternalError, UnreachableError } from "@nedalto/contract/common/errors.ts";
 import { createEndpointId, createRoomId } from "@nedalto/contract/common/ids.ts";
 import { JsonRpcErrorCode } from "@nedalto/contract/server/types.ts";
 
@@ -282,6 +282,18 @@ describe("Subscriptions", () => {
         });
         assert.equal(logger.at("error").length, 1);
         assert.deepEqual((await client.call("hub.subscribe")).result, { nodes: [], endpoints: [], rooms: [] });
+    });
+
+    test("logs a failure that the SDK or a device decided when the snapshot cannot be composed", async (context) => {
+        const { connect, roomRepository, logger } = await startServer(context);
+        const client = await connect();
+        roomRepository.failure = new UnreachableError("Asleep", { cause: new Error("no answer") });
+
+        await client.call("hub.subscribe");
+
+        assert.deepEqual(logger.at("info"), [
+            ["request failed", "hub.subscribe", "UNREACHABLE_ERROR", "Asleep", "cause:", "Error: no answer"],
+        ]);
     });
 
     test("answers invalid params, and does not subscribe, when the params are not empty", async (context) => {

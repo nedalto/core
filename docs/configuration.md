@@ -21,6 +21,8 @@ It may contain only letters, digits, the characters `-_.~!#$%&'*+^|` and the bac
 The hub creates the storage and log directories when it starts, if they do not exist.
 Under the storage path it keeps `hub.db`, its database, and `matter/`, the state of the Matter controller.
 Under the log path it writes `hub.log`, its own log, and `matter/hub.log`, the log of the Matter SDK.
+Rotated files are named `YYYYMMDD-HHmm-NN-hub.log`, and `hub.log.txt` lists them so that the oldest are deleted past `maxFiles`; a rotated file missing from that list is never deleted.
+Of the requests that fail, `hub.log` has at `info` those that a device or the SDK decided, at `warn` those that could not be classified, and at `error` the unexpected ones.
 
 ## Configuration file
 
@@ -28,6 +30,7 @@ The file is `hub.json` in `NEDALTO_CONFIG_PATH`.
 A JSON object.
 A missing file is the same as `{}`, which gives the default of every field below.
 A file that is not valid JSON, or that is JSON but not an object (an array, `null` or a primitive), is rejected.
+The error names the file and, for contents the schema rejects, lists the fields and why.
 
 Every section rejects a key it does not know, and the error lists the keys the section takes.
 A field left out takes its default, whatever the other fields of its section say.

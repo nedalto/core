@@ -15,7 +15,7 @@ try {
     environment = resolveEnvironment();
     config = loadConfig(join(environment.configPath, "hub.json"));
 } catch (error) {
-    process.stderr.write(`nedalto: failed to start: ${inspect(error)}\n`);
+    process.stderr.write(`nedalto: failed to start: ${inspect(error, { depth: 3 })}\n`);
     process.exit(1);
 }
 

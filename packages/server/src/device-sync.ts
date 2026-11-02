@@ -23,7 +23,8 @@ export interface DeviceSyncDeps {
 }
 
 // Stores and announces what changes on the devices by itself: the endpoints they gain or lose and the nodes the SDK
-// deletes. See `docs/decisions/0008-endpoints-that-change-on-the-device.md`.
+// deletes.
+// See `docs/decisions/0008-endpoints-that-change-on-the-device.md`.
 class DeviceSync implements Lifecycle {
     readonly #logger: Logger;
     readonly #nodeRepository: NodeRepository;

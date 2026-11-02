@@ -37,6 +37,7 @@ interface ValidationErrorOptions extends ErrorOptions {
 /** The input is invalid; `data.issues` says where and why. */
 export class ValidationError extends AppError {
     readonly code = "VALIDATION_ERROR";
+    declare readonly data: { readonly issues: readonly ValidationIssue[] };
 
     constructor(message: string, { issues, cause }: ValidationErrorOptions) {
         super(message, { cause, data: { issues } });

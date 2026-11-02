@@ -2,7 +2,7 @@ import type { Logger } from "@nedalto/contract/logger/ports.ts";
 import type { JsonRpcResponse } from "@nedalto/contract/server/schemas.ts";
 import { JsonRpcErrorCode } from "@nedalto/contract/server/types.ts";
 
-import { errorResponse, isUnexpected, type ParseOutcome, successResponse, toJsonRpcError } from "./wire.ts";
+import { errorResponse, logRequestFailure, type ParseOutcome, successResponse, toJsonRpcError } from "./wire.ts";
 
 type Handler = (params: unknown) => unknown;
 
@@ -40,9 +40,7 @@ export class Dispatcher {
         try {
             return successResponse(id, await handler(params));
         } catch (error) {
-            if (isUnexpected(error)) {
-                this.#logger.error("handler failed unexpectedly", method, error);
-            }
+            logRequestFailure(this.#logger, method, error);
             return errorResponse(id, toJsonRpcError(error));
         }
     }

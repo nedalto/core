@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import { InternalError, NotFoundError, ValidationError } from "@nedalto/contract/common/errors.ts";
+import { InternalError, NotFoundError, UnreachableError, ValidationError } from "@nedalto/contract/common/errors.ts";
 import { encode } from "@nedalto/contract/common/wire.ts";
 import type { JsonRpcErrorResponse, JsonRpcResponse } from "@nedalto/contract/server/schemas.ts";
 import { JsonRpcErrorCode } from "@nedalto/contract/server/types.ts";
@@ -18,6 +18,9 @@ const handlers = {
     },
     "test.invalid": () => {
         throw new ValidationError("bad", { issues: [] });
+    },
+    "test.asleep": () => {
+        throw new UnreachableError("Asleep", { cause: new Error("no answer") });
     },
     "test.internal": () => {
         throw new InternalError("bug");
@@ -127,5 +130,16 @@ describe("Dispatcher", () => {
             assert.partialDeepStrictEqual(failure(response).error.data, { code: "INTERNAL_ERROR" });
         }
         assert.equal(logger.at("error").length, 2);
+    });
+
+    test("logs a failure that the SDK or a device decided, without the params of the request", async () => {
+        const { logger, dispatch } = setup();
+
+        const response = failure(await dispatch(request("test.asleep", { setupCode: "secret-code" })));
+
+        assert.equal(response.error.message, "Asleep");
+        assert.deepEqual(logger.at("info"), [
+            ["request failed", "test.asleep", "UNREACHABLE_ERROR", "Asleep", "cause:", "Error: no answer"],
+        ]);
     });
 });

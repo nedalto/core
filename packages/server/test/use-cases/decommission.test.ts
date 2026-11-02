@@ -81,7 +81,7 @@ describe("DecommissionUseCase", () => {
         assert.deepEqual(bus.emitted, []);
     });
 
-    test("logs an error, throws it and emits nothing when the delete fails after the node left the fabric", async () => {
+    test("warns without the error, throws it and emits nothing when the delete fails after the node left the fabric", async () => {
         const { bus, logger, nodeRepository, nodeGateway, useCase } = setup();
         const failure = new IntegrationError("disk full");
         nodeRepository.failures.arm("delete", failure);
@@ -89,7 +89,10 @@ describe("DecommissionUseCase", () => {
         await assert.rejects(useCase.execute(NODE.id), failure);
 
         assert.equal(nodeGateway.decommissionCalls.length, 1);
-        assert.equal(logger.at("error").length, 1);
+        assert.deepEqual(logger.at("warn"), [
+            ["node left the fabric but could not be deleted, a retry deletes it from the database only", NODE.id],
+        ]);
+        assert.deepEqual(logger.at("error"), []);
         assert.deepEqual(bus.emitted, []);
     });
 

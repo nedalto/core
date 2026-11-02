@@ -20,6 +20,12 @@ On the wire, `VALIDATION_ERROR` is `-32602` and any other error of the hub is `-
 `message` is for people, `INTERNAL_ERROR` always says `"Internal error"`, and the cause never leaves the hub.
 Failures of the handshake are close codes ([0002](0002-authentication-in-the-websocket-handshake.md)).
 
+The operator reads the cause in `hub.log`.
+The failure of a request is logged once, where it is translated into the response, and only if it is unexpected or the SDK or a device decided it.
+An unexpected one goes at error, the base `IntegrationError`, which still has to be classified, at warn, and any other error with a `cause` or the code `INTEGRATION_ERROR` at info.
+A `VALIDATION_ERROR`, whose cause is only the decoder of the input, and the checks of the hub itself are not logged.
+Where an error is produced, only what the client will never see is logged: an error that is swallowed, a second failure that would be lost, or work that does not come from a request.
+
 What each code means for a client is in [the protocol](../protocol.md#errors).
 
 ## Alternatives
