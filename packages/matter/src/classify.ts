@@ -1,5 +1,5 @@
 import "./sdk-config.ts";
-import { causedBy, DestroyedDependencyError, NoResponseTimeoutError } from "@matter/main";
+import { causedBy, DestroyedDependencyError, NoResponseTimeoutError, TimeoutError } from "@matter/main";
 import {
     DiscoveryAggregateError,
     DiscoveryError,
@@ -9,6 +9,7 @@ import {
     NoDiscoveryTransportError,
 } from "@matter/main/node";
 import {
+    CommissioningTimeoutError,
     DeviceAlreadyCommissionedToThisFabricError,
     MaximumCommissionedFabricsReachedError,
     PasscodeMismatchError,
@@ -58,6 +59,11 @@ export function classifyCommissioningError(error: unknown): AppError {
     }
     if (error instanceof MaximumCommissionedFabricsReachedError) {
         return new CommissioningRejectedError("fabric-table-full", error);
+    }
+    // @matter/protocol 0.18.0: a step throws a timeout as it is, and `OperativeConnectionFailedError` wraps the one of
+    // the operational reconnection as its cause.
+    if (causedBy(error, CommissioningTimeoutError, TimeoutError)) {
+        return new CommissioningFailedError("pairing-failed", error);
     }
     return new IntegrationError("Commissioning failed", { cause: error });
 }

@@ -76,7 +76,7 @@ describe("loadConfig", () => {
                 assert.equal(error.code, "VALIDATION_ERROR");
                 assert.partialDeepStrictEqual(error.data, { issues: [{ path: "server.port" }] });
                 assert.ok(error.message.includes(filePath));
-                assert.ok(error.cause instanceof ValidationError);
+                assert.equal(error.cause, undefined);
                 return true;
             },
         );

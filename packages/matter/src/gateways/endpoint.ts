@@ -1,11 +1,17 @@
 import "../sdk-config.ts";
-import type { ObserverGroup } from "@matter/main";
-import { type ClientNode, ClusterBehavior, type Endpoint, EndpointLifecycle } from "@matter/main/node";
+import { ObserverGroup } from "@matter/main";
+import {
+    ChangeNotificationService,
+    ClientNode,
+    ClusterBehavior,
+    type Endpoint,
+    type ServerNode,
+} from "@matter/main/node";
 import { Invoke, Read, Write, type WriteResult } from "@matter/main/protocol";
 import { AttributeId, ClusterId, CommandId, EndpointNumber, Status, TlvOfModel } from "@matter/main/types";
 
 import { IntegrationError, ValidationError, type ValidationIssue } from "@nedalto/contract/common/errors.ts";
-import type { EndpointId, NodeId } from "@nedalto/contract/common/ids.ts";
+import type { EndpointId } from "@nedalto/contract/common/ids.ts";
 import {
     AttributeNotFoundError,
     CommandNotFoundError,
@@ -64,19 +70,22 @@ const clusterBehaviors = (endpoint: Endpoint): ClusterBehavior.Type[] =>
 export class MatterEndpointGateway implements EndpointGateway {
     readonly #bus: DomainEventBus;
     readonly #identity: Identity;
-    readonly #unobserve: () => void;
+    readonly #observers = new ObserverGroup();
 
-    constructor(bus: DomainEventBus, identity: Identity) {
+    constructor(bus: DomainEventBus, identity: Identity, controller: ServerNode) {
         this.#bus = bus;
         this.#identity = identity;
-        this.#unobserve = identity.observe((observers, { nodeId, node }) => {
-            this.#observe(observers, nodeId, node);
+        // @matter/node 0.18.0: the service of the controller also reports the changes of its peers, those of the
+        // endpoints a peer gains included. It logs an observer that throws and goes on, so a throw loses only the rest
+        // of that change.
+        this.#observers.on(controller.env.get(ChangeNotificationService).change, (change) => {
+            this.#announce(change);
         });
     }
 
     /** Stops announcing the changes of attributes. */
     close(): void {
-        this.#unobserve();
+        this.#observers.close();
     }
 
     async read(endpointId: EndpointId, clusterId: number, attributeId: number): Promise<AttributeValue> {
@@ -213,61 +222,43 @@ export class MatterEndpointGateway implements EndpointGateway {
         return { parentId: parentId ?? null, deviceType: endpoint.type.deviceType, clusters };
     }
 
-    // Every endpoint of the node is observed, also one not registered yet, and its id is looked up when an attribute
-    // changes: an endpoint is announced from when the reconciliation registers it until it forgets it.
-    #observe(observers: ObserverGroup, nodeId: NodeId, node: ClientNode): void {
-        // What stops observing each endpoint, so that the group of the node does not keep one the device removed.
-        const observed = new Map<Endpoint, (() => void)[]>();
-        const observe = (endpoint: Endpoint): void => {
-            // Endpoint 0 is the node's administration, which is never registered.
-            if (endpoint.number === 0 || observed.has(endpoint)) {
-                return;
-            }
-            const unobserves: (() => void)[] = [];
-            for (const behavior of clusterBehaviors(endpoint)) {
-                const events = endpoint.eventsOf(behavior.id);
-                for (const [name, attribute] of Object.entries(behavior.cluster.attributes ?? {})) {
-                    const changed = events[`${name}$Changed`];
-                    if (changed === undefined) {
-                        continue;
-                    }
-                    // @matter/node 0.18.0: `eventsOf(string)` types its observables without arguments, but an
-                    // attribute's `$Changed` passes the new value first, then the old one and the context.
-                    const announce = (...[value]: unknown[]): void => {
-                        const endpointId = this.#identity.endpointIdOf(nodeId, endpoint.number);
-                        if (endpointId === undefined) {
-                            return;
-                        }
-                        this.#bus.emit("endpoint:changed", {
-                            endpointId,
-                            clusterId: behavior.cluster.id,
-                            attributeId: attribute.id,
-                            value: normalizeValue(value),
-                            timestamp: Date.now(),
-                        });
-                    };
-                    observers.on(changed, announce);
-                    unobserves.push(() => observers.off(changed, announce));
-                }
-            }
-            observed.set(endpoint, unobserves);
-        };
-        for (const endpoint of node.endpoints) {
-            observe(endpoint);
+    // The id is looked up on each change: an endpoint is announced from when the reconciliation registers it until it
+    // forgets it, and neither the root of a node nor the controller's own endpoints are ever registered.
+    #announce(change: ChangeNotificationService.Change): void {
+        if (change.kind !== "update" || !ClusterBehavior.is(change.behavior)) {
+            return;
         }
-        // @matter/node 0.18.0: the changes of the lifecycle of every endpoint bubble up to the root of the node; an
-        // endpoint the device adds is `partsReady` once built, and `partsReady` again after a reset.
-        // @matter/general 0.18.0: `ObserverGroup` holds its observers until it is closed, which is when the node goes.
-        observers.on(node.lifecycle.changed, (change, endpoint) => {
-            if (change === EndpointLifecycle.Change.PartsReady) {
-                observe(endpoint);
-            } else if (change === EndpointLifecycle.Change.Destroyed) {
-                for (const unobserve of observed.get(endpoint) ?? []) {
-                    unobserve();
-                }
-                observed.delete(endpoint);
+        const { endpoint, behavior, properties } = change;
+        const endpointId = this.#registeredId(endpoint);
+        if (endpointId === undefined) {
+            return;
+        }
+        const attributes = behavior.cluster.attributes ?? {};
+        const state = endpoint.stateOf(behavior.id);
+        // @matter/node 0.18.0: a change without `properties` is about all of them, and one can name what is not in the
+        // cluster, such as a global attribute, or an optional attribute left without a value when the peer drops it.
+        for (const name of properties ?? Object.keys(attributes)) {
+            const attribute = attributes[name];
+            const value = state[name];
+            if (attribute !== undefined && value !== undefined) {
+                this.#bus.emit("endpoint:changed", {
+                    endpointId,
+                    clusterId: behavior.cluster.id,
+                    attributeId: attribute.id,
+                    value: normalizeValue(value),
+                    timestamp: Date.now(),
+                });
             }
-        });
+        }
+    }
+
+    #registeredId(endpoint: Endpoint): EndpointId | undefined {
+        let owner: Endpoint | undefined = endpoint;
+        while (owner !== undefined && !(owner instanceof ClientNode)) {
+            owner = owner.owner;
+        }
+        const nodeId = owner === undefined ? undefined : this.#identity.nodeIdOf(owner);
+        return nodeId === undefined ? undefined : this.#identity.endpointIdOf(nodeId, endpoint.number);
     }
 
     #resolve(endpointId: EndpointId): PeerEndpoint {

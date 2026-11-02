@@ -33,6 +33,6 @@ export function loadConfig(filePath: string): Config {
         if (!(error instanceof ValidationError)) {
             throw error;
         }
-        throw new ValidationError(`Config file ${filePath} is invalid`, { cause: error, issues: error.data.issues });
+        throw new ValidationError(`Config file ${filePath} is invalid`, { issues: error.data.issues });
     }
 }
