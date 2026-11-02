@@ -15,7 +15,7 @@ External contributions are not being accepted at this stage.
 
 ## Development
 
-Requirements: Node.js 26 LTS (26.13 or later) and npm 11.
+Requirements: Node.js 26 LTS (26.13 or later) and npm 11 (11.20 or later).
 
 ```sh
 npm ci

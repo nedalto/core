@@ -102,7 +102,7 @@ export class MatterController implements Controller {
         });
         const identity = new Identity(this.#logger);
         const node = new MatterNodeGateway(this.#logger, this.#bus, identity, server);
-        const endpoint = new MatterEndpointGateway(this.#bus, identity);
+        const endpoint = new MatterEndpointGateway(this.#bus, identity, server);
         // @matter/node 0.18.0: the peers are read from storage on first access and start connecting when the
         // server goes online, so hydrating before `start()` attaches the observers before any connection.
         identity.hydrate(server.peers, this.#nodeRepository, this.#endpointRepository);

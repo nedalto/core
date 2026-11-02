@@ -2,6 +2,7 @@ import "../../src/sdk-config.ts";
 import assert from "node:assert/strict";
 import { describe, type TestContext, test } from "node:test";
 
+import { ChangeNotificationService } from "@matter/main/node";
 import { Status } from "@matter/main/types";
 
 import { ValidationError } from "@nedalto/contract/common/errors.ts";
@@ -39,6 +40,8 @@ const VENDOR_CLUSTER = 0xfff1fc01;
 const UNADDRESSABLE_CLUSTER = 0x99999999;
 const UNADDRESSABLE_ATTRIBUTE = 0x9999;
 const UNADDRESSABLE_COMMAND = 0x100;
+const DESCRIPTOR_PARTS_LIST = 0x0003;
+const DESCRIPTOR_ATTRIBUTES_WITH_VALUE = [0x0000, 0x0001, 0x0002, DESCRIPTOR_PARTS_LIST];
 const GLOBAL_ATTRIBUTES = new Set([0xfff8, 0xfff9, 0xfffa, 0xfffb, 0xfffc, 0xfffd]);
 
 /** A started controller that has commissioned a light, which is its only endpoint. */
@@ -51,6 +54,33 @@ async function commissionLight(t: TestContext) {
     assert.ok(light !== undefined);
     return { ...started, network, manualCode, endpointId: light.id };
 }
+
+/** A registered light of a peer, and a way to report a change of its Descriptor cluster as the SDK would. */
+const lightWithChanges = async (t: TestContext) => {
+    const network = new TestNetwork(t);
+    const { manualCode } = await network.startDevice();
+    const peer = await network.peer(manualCode);
+    const bus = new RecordingBus();
+    const identity = new Identity(new RecordingLogger());
+    const gateway = new MatterEndpointGateway(bus, identity, peer.owner);
+    t.after(() => gateway.close());
+    const nodeId = createNodeId();
+    identity.add(nodeId, peer, [{ id: createEndpointId(), nodeId, matterNumber: 1, name: "Light", roomId: null }]);
+    const endpoint = peer.endpoints.for(1);
+    const behavior = endpoint.behaviors.supported.descriptor;
+    assert.ok(behavior !== undefined);
+    const announce = (properties?: string[]) => {
+        peer.owner.env
+            .get(ChangeNotificationService)
+            .change.emit({ kind: "update", endpoint, behavior, version: 1, properties });
+    };
+    const attributeIds = () =>
+        bus.emitted.flatMap(({ payload }) => {
+            assert.ok(typeof payload === "object" && payload !== null && "attributeId" in payload);
+            return [payload.attributeId];
+        });
+    return { announce, attributeIds };
+};
 
 const issuePaths = (error: unknown): unknown[] | undefined => {
     assert.ok(error instanceof ValidationError);
@@ -387,7 +417,7 @@ describe("MatterEndpointGateway", () => {
         const bus = new RecordingBus();
         const identity = new Identity(logger);
         const nodeGateway = new MatterNodeGateway(logger, bus, identity, peer.owner);
-        const endpointGateway = new MatterEndpointGateway(bus, identity);
+        const endpointGateway = new MatterEndpointGateway(bus, identity, peer.owner);
         const nodeId = createNodeId();
         const light = { id: createEndpointId(), nodeId, matterNumber: 1, name: "Light", roomId: null };
         identity.add(nodeId, peer, [light]);
@@ -410,32 +440,76 @@ describe("MatterEndpointGateway", () => {
         endpointGateway.close();
     });
 
-    test("stops observing the attributes of an endpoint that the bridge loses", async (t) => {
+    test("announces nothing of an endpoint that Identity has forgotten", async (t) => {
         const network = new TestNetwork(t);
         const bridge = await network.startBridge();
-        const light = await bridge.addLight("light-3");
+        const forgotten = await bridge.addLight("forgotten");
+        const kept = await bridge.addLight("kept");
         const peer = await network.peer(bridge.manualCode);
-        const logger = new RecordingLogger();
         const bus = new RecordingBus();
-        const identity = new Identity(logger);
-        const nodeGateway = new MatterNodeGateway(logger, bus, identity, peer.owner);
-        const endpointGateway = new MatterEndpointGateway(bus, identity);
-        t.after(() => {
-            nodeGateway.close();
-            endpointGateway.close();
-        });
+        const identity = new Identity(new RecordingLogger());
+        const gateway = new MatterEndpointGateway(bus, identity, peer.owner);
+        t.after(() => gateway.close());
         const nodeId = createNodeId();
-        identity.add(nodeId, peer, []);
-        nodeGateway.reconcileEndpoints(nodeId);
-        const changed = peer.endpoints.for(light.number).eventsOf("onOff")["onOff$Changed"];
-        assert.ok(changed !== undefined);
-        assert.equal(changed.isObserved, true);
-        const lost = nextChanges(nodeGateway, ({ removed }) => removed);
+        const recordOf = ({ number }: { number: number }) => ({
+            id: createEndpointId(),
+            nodeId,
+            matterNumber: number,
+            name: "Light",
+            roomId: null,
+        });
+        const [forgottenRecord, keptRecord] = [recordOf(forgotten), recordOf(kept)];
+        identity.add(nodeId, peer, [forgottenRecord, keptRecord]);
+        identity.update(nodeId, [], [forgottenRecord.id]);
+        const announced = new Set<EndpointId>();
+        bus.on("endpoint:changed", ({ endpointId }) => announced.add(endpointId));
+        const changed = bus.next("endpoint:changed", ({ endpointId }) => endpointId === keptRecord.id);
 
-        await light.delete();
+        // In this order, so that the report of the forgotten light comes before the event awaited.
+        await forgotten.setStateOf("onOff", { onOff: false });
+        await kept.setStateOf("onOff", { onOff: false });
+        await changed;
 
-        assert.equal((await lost).length, 1);
-        assert.equal(changed.isObserved, false);
+        assert.deepEqual([...announced], [keptRecord.id]);
+    });
+
+    test("announces only the attributes with a value among the properties of a change", async (t) => {
+        const { announce, attributeIds } = await lightWithChanges(t);
+
+        // The tag list is optional and the light has none, and the attribute list is global, so not in the cluster.
+        announce(["tagList", "attributeList", "partsList"]);
+
+        assert.deepEqual(attributeIds(), [DESCRIPTOR_PARTS_LIST]);
+    });
+
+    test("announces every attribute with a value for a change that names no properties", async (t) => {
+        const { announce, attributeIds } = await lightWithChanges(t);
+
+        announce();
+
+        assert.deepEqual(new Set(attributeIds()), new Set(DESCRIPTOR_ATTRIBUTES_WITH_VALUE));
+    });
+
+    test("announces nothing after close()", async (t) => {
+        const network = new TestNetwork(t);
+        const { manualCode } = await network.startDevice();
+        const peer = await network.peer(manualCode);
+        const identity = new Identity(new RecordingLogger());
+        const closedBus = new RecordingBus();
+        const openBus = new RecordingBus();
+        const closed = new MatterEndpointGateway(closedBus, identity, peer.owner);
+        const open = new MatterEndpointGateway(openBus, identity, peer.owner);
+        t.after(() => open.close());
+        const nodeId = createNodeId();
+        const light = { id: createEndpointId(), nodeId, matterNumber: 1, name: "Light", roomId: null };
+        identity.add(nodeId, peer, [light]);
+        closed.close();
+        const changed = openBus.next("endpoint:changed", ({ endpointId }) => endpointId === light.id);
+
+        await open.invoke(light.id, ON_OFF, ON_COMMAND);
+        await changed;
+
+        assert.deepEqual(closedBus.emitted, []);
     });
 
     test("describe names the aggregator as the parent of a bridged light, and none for the aggregator", async (t) => {

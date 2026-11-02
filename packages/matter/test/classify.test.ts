@@ -12,8 +12,10 @@ import {
     NoDiscoveryTransportError,
 } from "@matter/main/node";
 import {
+    CommissioningTimeoutError,
     DeviceAlreadyCommissionedToThisFabricError,
     MaximumCommissionedFabricsReachedError,
+    OperativeConnectionFailedError,
     PasscodeMismatchError,
     PeerAddress,
     PeerUnreachableError,
@@ -114,6 +116,44 @@ describe("classifyCommissioningError", () => {
             type: CommissioningFailedError,
             code: "INTEGRATION_ERROR",
             data: { reason: "pairing-failed" },
+        },
+        {
+            title: "a commissioning that takes longer than its maximum time",
+            sdkError: new CommissioningTimeoutError("too long"),
+            type: CommissioningFailedError,
+            code: "INTEGRATION_ERROR",
+            data: { reason: "pairing-failed" },
+        },
+        {
+            title: "a device that stops answering in a step",
+            sdkError: new NoResponseTimeoutError("no answer"),
+            type: CommissioningFailedError,
+            code: "INTEGRATION_ERROR",
+            data: { reason: "pairing-failed" },
+        },
+        {
+            title: "a device that stops answering in the operational reconnection",
+            sdkError: new OperativeConnectionFailedError("failed", { cause: new NoResponseTimeoutError("no answer") }),
+            type: CommissioningFailedError,
+            code: "INTEGRATION_ERROR",
+            data: { reason: "pairing-failed" },
+        },
+        {
+            title: "a device that was not discovered, with a timeout in its chain",
+            sdkError: new DeviceNotDiscoveredError("no device", { cause: new NoResponseTimeoutError("no answer") }),
+            type: CommissioningFailedError,
+            code: "INTEGRATION_ERROR",
+            data: { reason: "not-found" },
+        },
+        {
+            title: "attempts that all failed with a passcode mismatch, with a timeout in their chain",
+            sdkError: new DiscoveryAggregateError(
+                [new PasscodeMismatchError("wrong", { cause: new NoResponseTimeoutError("no answer") })],
+                "all attempts failed",
+            ),
+            type: CommissioningFailedError,
+            code: "INTEGRATION_ERROR",
+            data: { reason: "passcode-rejected" },
         },
         {
             title: "a device already commissioned to the fabric",
