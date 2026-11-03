@@ -1,9 +1,9 @@
 import "../../src/sdk-config.ts";
 import assert from "node:assert/strict";
-import { describe, test } from "node:test";
+import { describe, type TestContext, test } from "node:test";
 
 import { ObserverGroup, VendorId } from "@matter/main";
-import { EndpointLifecycle } from "@matter/main/node";
+import { EndpointLifecycle, NodeConnectionState } from "@matter/main/node";
 import { CommissioningFlowType, QrPairingCodeCodec } from "@matter/main/types";
 
 import { ValidationError } from "@nedalto/contract/common/errors.ts";
@@ -11,14 +11,23 @@ import { createEndpointId, createNodeId } from "@nedalto/contract/common/ids.ts"
 import { EndpointNotFoundError } from "@nedalto/contract/endpoint/errors.ts";
 import { DecommissioningRejectedError, NodeNotFoundError } from "@nedalto/contract/node/errors.ts";
 
-import { MatterNodeGateway } from "../../src/gateways/node.ts";
+import { MatterNodeGateway, toNodeConnection } from "../../src/gateways/node.ts";
 import { Identity } from "../../src/identity.ts";
 import { RecordingBus } from "../helpers/bus.ts";
 import { RecordingLogger } from "../helpers/logger.ts";
-import { nextChanges, TestNetwork } from "../helpers/network.ts";
+import { nextChanges, TestNetwork, untilConnected } from "../helpers/network.ts";
 
 const ON_OFF = 0x06;
 const ON_OFF_ATTRIBUTE = 0x0000;
+
+/** The name of each event with the node it names, once each. */
+const eventsOf = (emitted: readonly { name: string; payload: unknown }[]): Set<string> =>
+    new Set(
+        emitted.map(({ name, payload }) => {
+            assert.ok(typeof payload === "object" && payload !== null && "nodeId" in payload);
+            return `${name} ${String(payload.nodeId)}`;
+        }),
+    );
 
 const isInvalidSetupCode =
     (message: RegExp) =>
@@ -33,6 +42,38 @@ const isInvalidSetupCode =
         assert.match(issue.message, message);
         return true;
     };
+
+// A gateway over a commissioned peer that is not registered yet.
+async function gatewayOverPeer(t: TestContext) {
+    const network = new TestNetwork(t);
+    const { manualCode, device } = await network.startDevice();
+    const peer = await network.peer(manualCode);
+    const logger = new RecordingLogger();
+    const bus = new RecordingBus();
+    const identity = new Identity(logger);
+    const gateway = new MatterNodeGateway(logger, bus, identity, peer.owner);
+    t.after(() => gateway.close());
+    // Observed after the gateway, so that when it resolves the gateway has already had its turn.
+    const nextChange = (): Promise<void> =>
+        new Promise((resolve) => {
+            peer.lifecycle.connectionStateChanged.once(() => resolve());
+        });
+    return { device, peer, bus, identity, gateway, nextChange };
+}
+
+describe("toNodeConnection", () => {
+    const cases = [
+        { state: NodeConnectionState.Connected, connection: "connected" },
+        { state: NodeConnectionState.Reconnecting, connection: "reconnecting" },
+        { state: NodeConnectionState.WaitingForDeviceDiscovery, connection: "waiting-for-discovery" },
+        { state: NodeConnectionState.Disconnected, connection: "disconnected" },
+    ];
+    for (const { state, connection } of cases) {
+        test(`translates ${NodeConnectionState[state]} to ${connection}`, () => {
+            assert.equal(toNodeConnection(state), connection);
+        });
+    }
+});
 
 describe("MatterNodeGateway", () => {
     test("commission joins the device of a manual pairing code and returns its node and endpoint", async (t) => {
@@ -151,11 +192,14 @@ describe("MatterNodeGateway", () => {
         await assert.rejects(controller.node.decommission(createNodeId()), NodeNotFoundError);
     });
 
-    test("decommission rejects a second call for a node that is being decommissioned, and announces no disconnection", async (t) => {
+    test("decommission rejects a second call for a node that is being decommissioned, and announces only the changes of connection of the node", async (t) => {
         const network = new TestNetwork(t);
         const { manualCode, device } = await network.startDevice();
-        const { controller, bus } = await network.startController();
+        const started = await network.startController();
+        const { controller, bus } = started;
         const { node } = await controller.node.commission(manualCode);
+        await untilConnected(started, node.id);
+        const before = bus.emitted.length;
 
         const [first, second] = await Promise.allSettled([
             controller.node.decommission(node.id),
@@ -169,7 +213,7 @@ describe("MatterNodeGateway", () => {
         assert.equal(error.code, "CONFLICT_ERROR");
         assert.deepEqual(error.data, { nodeId: node.id, reason: "in-progress" });
         assert.equal(device.lifecycle.isCommissioned, false);
-        assert.deepEqual(bus.emitted, []);
+        assert.deepEqual(eventsOf(bus.emitted.slice(before)), new Set([`node:connection-changed ${node.id}`]));
     });
 
     test("decommission throws NodeNotFoundError and forgets the node when the SDK has already deleted it", async (t) => {
@@ -189,16 +233,21 @@ describe("MatterNodeGateway", () => {
         gateway.close();
     });
 
-    test("decommission does not announce the node leaving the fabric as a disconnection", async (t) => {
-        const network = new TestNetwork(t);
-        const { manualCode } = await network.startDevice();
-        const { controller, bus } = await network.startController();
-        const { node } = await controller.node.commission(manualCode);
+    for (const force of [false, true]) {
+        test(`decommission announces the changes of connection of the node ${force ? "when forced" : "from the fabric"}`, async (t) => {
+            const network = new TestNetwork(t);
+            const { manualCode } = await network.startDevice();
+            const started = await network.startController();
+            const { controller, bus } = started;
+            const { node } = await controller.node.commission(manualCode);
+            await untilConnected(started, node.id);
+            const before = bus.emitted.length;
 
-        await controller.node.decommission(node.id);
+            await controller.node.decommission(node.id, force);
 
-        assert.deepEqual(bus.emitted, []);
-    });
+            assert.deepEqual(eventsOf(bus.emitted.slice(before)), new Set([`node:connection-changed ${node.id}`]));
+        });
+    }
 
     test("getInfo returns what the device reports about itself", async (t) => {
         const network = new TestNetwork(t);
@@ -232,33 +281,100 @@ describe("MatterNodeGateway", () => {
         assert.throws(() => controller.node.getInfo(createNodeId()), NodeNotFoundError);
     });
 
-    test("isReachable is true for a node that is connected", async (t) => {
-        const network = new TestNetwork(t);
-        const { manualCode } = await network.startDevice();
-        const { controller } = await network.startController();
-        const { node } = await controller.node.commission(manualCode);
-
-        assert.equal(controller.node.isReachable(node.id), true);
-    });
-
-    test("isReachable is false for an unknown node", async (t) => {
+    test("connectionOf is disconnected for an unknown node", async (t) => {
         const network = new TestNetwork(t);
         const { controller } = await network.startController();
 
-        assert.equal(controller.node.isReachable(createNodeId()), false);
+        assert.equal(controller.node.connectionOf(createNodeId()), "disconnected");
     });
 
-    // A device that goes away is detected by the SDK about 13 seconds later, which is too long for a test.
-    test("announces node:connected when a known node connects", async (t) => {
+    test("announces the connection of a node of the storage up to connected when the controller restarts", async (t) => {
         const network = new TestNetwork(t);
         const { manualCode } = await network.startDevice();
         const { node, restarted } = await network.commissionAndRestart(manualCode);
-        const connected = restarted.bus.next("node:connected");
+        const changes: unknown[] = [];
+        restarted.bus.on("node:connection-changed", ({ nodeId, connection }) => changes.push([nodeId, connection]));
+        const connected = restarted.bus.next("node:connection-changed", ({ connection }) => connection === "connected");
 
         await restarted.controller.start();
+        await connected;
 
+        assert.deepEqual(changes, [
+            [node.id, "reconnecting"],
+            [node.id, "connected"],
+        ]);
+        assert.equal(restarted.controller.node.connectionOf(node.id), "connected");
+    });
+
+    test("announces the connection of a node commissioned after the gateway was built", async (t) => {
+        const network = new TestNetwork(t);
+        const { manualCode } = await network.startDevice();
+        const { controller, bus } = await network.startController();
+        const connected = bus.next("node:connection-changed", ({ connection }) => connection === "connected");
+
+        const { node } = await controller.node.commission(manualCode);
+
+        // @matter/node 0.18.0: `commission()` returns after the initial read, before the subscription is live.
+        assert.equal(controller.node.connectionOf(node.id), "reconnecting");
         assert.equal((await connected).nodeId, node.id);
-        assert.equal(restarted.controller.node.isReachable(node.id), true);
+    });
+
+    test("announces a value other than connected, the same that connectionOf gives, when the device stops", async (t) => {
+        const network = new TestNetwork(t);
+        const { manualCode, device } = await network.startDevice();
+        const started = await network.startController();
+        const { controller, bus } = started;
+        const { node } = await controller.node.commission(manualCode);
+        await untilConnected(started, node.id);
+        const stopped = bus.next("node:connection-changed", ({ connection }) => connection !== "connected");
+
+        await device.close();
+
+        const { nodeId, connection } = await stopped;
+        assert.equal(nodeId, node.id);
+        assert.equal(controller.node.connectionOf(node.id), connection);
+    });
+
+    test("announces nothing of a peer that is not registered", async (t) => {
+        const { device, bus, nextChange } = await gatewayOverPeer(t);
+        const changed = nextChange();
+
+        await device.close();
+        await changed;
+
+        assert.deepEqual(bus.emitted, []);
+    });
+
+    test("announces nothing after close()", async (t) => {
+        const { device, peer, bus, identity, gateway, nextChange } = await gatewayOverPeer(t);
+        identity.add(createNodeId(), peer, []);
+        const changed = nextChange();
+
+        gateway.close();
+        await device.close();
+        await changed;
+
+        assert.deepEqual(bus.emitted, []);
+    });
+
+    test("stops observing a peer that the SDK deletes", async (t) => {
+        const { peer, identity } = await gatewayOverPeer(t);
+        identity.add(createNodeId(), peer, []);
+        assert.equal(peer.lifecycle.connectionStateChanged.isObserved, true);
+
+        await peer.delete();
+
+        assert.equal(peer.lifecycle.connectionStateChanged.isObserved, false);
+    });
+
+    test("stops observing a peer that decommission deletes", async (t) => {
+        const { peer, identity, gateway } = await gatewayOverPeer(t);
+        const nodeId = createNodeId();
+        identity.add(nodeId, peer, []);
+
+        await gateway.decommission(nodeId, true);
+
+        assert.equal(peer.lifecycle.connectionStateChanged.isObserved, false);
     });
 
     test("announces the node and reconcileEndpoints returns a light the bridge gains, registered and with its state", async (t) => {

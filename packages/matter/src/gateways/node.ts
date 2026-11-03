@@ -6,6 +6,7 @@ import {
     type CommissioningClient,
     type Endpoint,
     EndpointLifecycle,
+    NodeConnectionState,
     type ServerNode,
 } from "@matter/main/node";
 import { ManualPairingCodeCodec, type QrCodeData, QrPairingCodeCodec } from "@matter/main/types";
@@ -18,7 +19,7 @@ import type { DomainEventBus } from "@nedalto/contract/events.ts";
 import type { Logger } from "@nedalto/contract/logger/ports.ts";
 import { DecommissioningRejectedError, NodeNotFoundError } from "@nedalto/contract/node/errors.ts";
 import type { NodeGateway } from "@nedalto/contract/node/ports.ts";
-import type { CommissioningResult, EndpointChanges, NodeInfo } from "@nedalto/contract/node/types.ts";
+import type { CommissioningResult, EndpointChanges, NodeConnection, NodeInfo } from "@nedalto/contract/node/types.ts";
 
 import { classifyCommissioningError, classifyDecommissioningError } from "../classify.ts";
 import type { Identity } from "../identity.ts";
@@ -38,6 +39,22 @@ const nonBlank = (value: string | undefined): string | undefined => value?.trim(
 // which holds only the direct children and would miss what a bridge exposes.
 const controllableEndpoints = (node: ClientNode): Endpoint[] => node.endpoints.filter(({ number }) => number !== 0);
 
+/** What a client calls each state of the connection to a peer, one to one. */
+export function toNodeConnection(state: NodeConnectionState): NodeConnection {
+    switch (state) {
+        case NodeConnectionState.Connected:
+            return "connected";
+        case NodeConnectionState.Disconnected:
+            return "disconnected";
+        case NodeConnectionState.Reconnecting:
+            return "reconnecting";
+        case NodeConnectionState.WaitingForDeviceDiscovery:
+            return "waiting-for-discovery";
+        default:
+            return state satisfies never;
+    }
+}
+
 /** The `NodeGateway` over the peers of the controller node. */
 export class MatterNodeGateway implements NodeGateway {
     readonly #logger: Logger;
@@ -45,8 +62,8 @@ export class MatterNodeGateway implements NodeGateway {
     readonly #identity: Identity;
     readonly #controller: ServerNode;
     readonly #decommissioning = new Set<NodeId>();
-    readonly #unobserve: () => void;
-    readonly #peerObservers = new ObserverGroup();
+    readonly #collectionObservers = new ObserverGroup();
+    readonly #peerObservers = new Map<ClientNode, ObserverGroup>();
     readonly #structureListeners = new Set<(nodeId: NodeId) => void>();
     readonly #deletionListeners = new Set<(nodeId: NodeId) => void>();
 
@@ -55,32 +72,22 @@ export class MatterNodeGateway implements NodeGateway {
         this.#bus = bus;
         this.#identity = identity;
         this.#controller = controller;
-        this.#unobserve = identity.observe((observers, { nodeId, node }) => {
-            observers.on(node.lifecycle.online, () => {
-                this.#bus.emit("node:connected", { nodeId, timestamp: Date.now() });
-            });
-            observers.on(node.lifecycle.offline, () => {
-                if (!this.#decommissioning.has(nodeId)) {
-                    this.#bus.emit("node:disconnected", { nodeId, timestamp: Date.now() });
-                }
-            });
-            observers.on(node.lifecycle.changed, (change, endpoint) => {
-                if (
-                    (change === EndpointLifecycle.Change.PartsReady || change === EndpointLifecycle.Change.Destroyed) &&
-                    endpoint !== node &&
-                    !this.#isLeaving(nodeId, node)
-                ) {
-                    this.#notify(this.#structureListeners, nodeId);
-                }
-            });
-            observers.on(node.lifecycle.seeded, () => {
-                this.#notify(this.#structureListeners, nodeId);
-            });
+        // @matter/node 0.18.0: the peers restored from storage join the collection as it is created, before it can be
+        // observed. It also holds the devices discovered and not commissioned, which nothing is announced for because
+        // they are not registered, as with a node between its commissioning and its registration.
+        for (const peer of controller.peers) {
+            this.#observePeer(peer);
+        }
+        this.#collectionObservers.on(controller.peers.added, (peer) => {
+            this.#observePeer(peer);
         });
         // @matter/node 0.18.0: a peer leaves this set when it is destroyed, also while the controller closes, which is
         // why `close()` comes first.
-        this.#peerObservers.on(controller.peers.deleted, (node) => {
-            const nodeId = this.#identity.nodeIdOf(node);
+        this.#collectionObservers.on(controller.peers.deleted, (peer) => {
+            // First and whoever the peer was, so that nothing of it runs while the node is reported as deleted.
+            this.#peerObservers.get(peer)?.close();
+            this.#peerObservers.delete(peer);
+            const nodeId = this.#identity.nodeIdOf(peer);
             if (nodeId !== undefined && !this.#decommissioning.has(nodeId)) {
                 this.#identity.remove(nodeId);
                 this.#logger.info("the SDK deleted the node", nodeId);
@@ -91,8 +98,11 @@ export class MatterNodeGateway implements NodeGateway {
 
     /** Stops announcing the nodes' connections, structure and deletion. */
     close(): void {
-        this.#unobserve();
-        this.#peerObservers.close();
+        this.#collectionObservers.close();
+        for (const observers of this.#peerObservers.values()) {
+            observers.close();
+        }
+        this.#peerObservers.clear();
     }
 
     async commission(setupCode: string): Promise<CommissioningResult> {
@@ -122,7 +132,8 @@ export class MatterNodeGateway implements NodeGateway {
         if (this.#decommissioning.has(nodeId)) {
             throw new DecommissioningRejectedError(nodeId, "in-progress");
         }
-        // The node goes offline while it leaves the fabric, which is not a disconnection to announce.
+        // While the node leaves the fabric, the teardown of its endpoints is not a change of structure, and its deletion
+        // is ours and not one by the SDK.
         this.#decommissioning.add(nodeId);
         try {
             // `delete()` forgets the node without contacting the device; `decommission()` removes our fabric from it.
@@ -141,8 +152,9 @@ export class MatterNodeGateway implements NodeGateway {
         this.#logger.info("decommissioned node", nodeId, force ? "forced" : "from the fabric");
     }
 
-    isReachable(nodeId: NodeId): boolean {
-        return this.#identity.node(nodeId)?.lifecycle.isOnline ?? false;
+    connectionOf(nodeId: NodeId): NodeConnection {
+        const node = this.#identity.node(nodeId);
+        return node === undefined ? "disconnected" : toNodeConnection(node.lifecycle.connectionState);
     }
 
     getInfo(nodeId: NodeId): NodeInfo {
@@ -206,10 +218,41 @@ export class MatterNodeGateway implements NodeGateway {
         };
     }
 
-    // @matter/node 0.18.0: `delete()` and `close()` report `destroying` on the node before they destroy its endpoints,
-    // which is taking the node down and not a change of its structure.
-    #isLeaving(nodeId: NodeId, node: ClientNode): boolean {
-        return this.#decommissioning.has(nodeId) || node.lifecycle.isGone;
+    #observePeer(peer: ClientNode): void {
+        // @matter/general 0.18.0: a group holds on to what it observes until it is closed, so each peer has its own, which
+        // goes when the peer does.
+        const observers = new ObserverGroup();
+        this.#peerObservers.set(peer, observers);
+        observers.on(peer.lifecycle.connectionStateChanged, (state) => {
+            const nodeId = this.#identity.nodeIdOf(peer);
+            if (nodeId !== undefined) {
+                this.#bus.emit("node:connection-changed", {
+                    nodeId,
+                    connection: toNodeConnection(state),
+                    timestamp: Date.now(),
+                });
+            }
+        });
+        observers.on(peer.lifecycle.changed, (change, endpoint) => {
+            if (
+                (change !== EndpointLifecycle.Change.PartsReady && change !== EndpointLifecycle.Change.Destroyed) ||
+                endpoint === peer
+            ) {
+                return;
+            }
+            const nodeId = this.#identity.nodeIdOf(peer);
+            // @matter/node 0.18.0: `delete()` and `close()` report `destroying` on the node before they destroy its
+            // endpoints, which is taking the node down and not a change of its structure, as is our decommission.
+            if (nodeId !== undefined && !this.#decommissioning.has(nodeId) && !peer.lifecycle.isGone) {
+                this.#notify(this.#structureListeners, nodeId);
+            }
+        });
+        observers.on(peer.lifecycle.seeded, () => {
+            const nodeId = this.#identity.nodeIdOf(peer);
+            if (nodeId !== undefined) {
+                this.#notify(this.#structureListeners, nodeId);
+            }
+        });
     }
 
     #notify(listeners: ReadonlySet<(nodeId: NodeId) => void>, nodeId: NodeId): void {

@@ -5,7 +5,7 @@ import type { EndpointGateway } from "@nedalto/contract/endpoint/ports.ts";
 import type { AttributeValue, EndpointShape } from "@nedalto/contract/endpoint/types.ts";
 import { NodeNotFoundError } from "@nedalto/contract/node/errors.ts";
 import type { NodeGateway } from "@nedalto/contract/node/ports.ts";
-import type { CommissioningResult, EndpointChanges, NodeInfo } from "@nedalto/contract/node/types.ts";
+import type { CommissioningResult, EndpointChanges, NodeConnection, NodeInfo } from "@nedalto/contract/node/types.ts";
 
 /** A `NodeGateway` that answers from what a test sets and keeps what it was asked. */
 export class FakeNodeGateway implements NodeGateway {
@@ -20,7 +20,7 @@ export class FakeNodeGateway implements NodeGateway {
 
     readonly commissionCalls: string[] = [];
     readonly decommissionCalls: { nodeId: NodeId; force: boolean | undefined }[] = [];
-    readonly reachable = new Set<NodeId>();
+    readonly connections = new Map<NodeId, NodeConnection>();
     readonly infos = new Map<NodeId, NodeInfo>();
 
     /** What `reconcileEndpoints` returns for each node, once; a node with none has no changes, and one in `unknown` throws. */
@@ -92,8 +92,8 @@ export class FakeNodeGateway implements NodeGateway {
         return failure === undefined ? Promise.resolve() : Promise.reject(failure);
     }
 
-    isReachable(nodeId: NodeId): boolean {
-        return this.reachable.has(nodeId);
+    connectionOf(nodeId: NodeId): NodeConnection {
+        return this.connections.get(nodeId) ?? "disconnected";
     }
 
     getInfo(nodeId: NodeId): NodeInfo {

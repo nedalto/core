@@ -161,12 +161,22 @@ With `room:removed`, the client sets to `null` the `roomId` of the endpoints tha
 
 An endpoint does not get `endpoint:changed` before its `endpoint:added` or after its `endpoint:removed`.
 
-An event can name a node or an endpoint the client does not know, when a commissioning failed after the device joined the fabric or an endpoint could not be stored when the device gained it; the client ignores it.
+An event can name a node or an endpoint the client does not know, when a commissioning failed after the device joined the fabric, an endpoint could not be stored when the device gained it, or the connection of a node changed just before its `node:added`; the client ignores it.
 
 A client ignores an event whose name it does not know.
 
-`reachable: false` does not mean that the node is gone, only that it does not answer now.
-A node stays in `node.list` and in the snapshot, with `reachable: false`, until `node:removed`.
+A node that is not `connected` is not gone: it stays in `node.list` and in the snapshot until `node:removed`.
+
+### Connection of a node
+
+`connection` of a node says how the hub stands with it now, and `node:connection-changed` carries each new value:
+
+- `connected`: the hub has a session and a live subscription with the node, and its data is up to date.
+- `reconnecting`: the hub is trying to recover the connection; it also appears when the hub starts, before the first connection, and in the `node:added` of a node that has just been commissioned.
+- `waiting-for-discovery`: the node seems to be offline, with no address left to try, and the hub waits for the device to announce itself on the network; a device that sleeps (an ICD of type LIT) also gets here when it does not check in on time.
+- `disconnected`: the hub is not trying (as it starts or stops), which does not mean that the device is off.
+
+The hub publishes the value as it is, and how to present it is up to the client: for example, whether `reconnecting` counts as available or whether it waits before warning.
 
 ### Reachability of an endpoint
 
@@ -174,7 +184,7 @@ A node stays in `node.list` and in the snapshot, with `reachable: false`, until 
 
 A client works out whether an endpoint is reachable from what it already has:
 
-1. If `reachable` of its node is `false`, no endpoint of the node is reachable.
+1. If `connection` of its node is not `connected`, no endpoint of the node is reachable.
 2. Otherwise, it looks for the first endpoint that has the cluster `0x39` (Bridged Device Basic Information), starting from the endpoint itself and going up through `parentId`, and the attribute `0x11` (Reachable) of that cluster decides.
 3. If none has that cluster, the endpoint is reachable.
 

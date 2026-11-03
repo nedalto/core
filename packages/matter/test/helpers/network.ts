@@ -21,6 +21,7 @@ import { AggregatorEndpoint } from "@matter/main/endpoints/aggregator";
 import { BridgedNodeEndpoint } from "@matter/main/endpoints/bridged-node";
 import { type ClientNode, type CommissioningClient, ControllerBehavior, Endpoint, ServerNode } from "@matter/main/node";
 
+import type { NodeId } from "@nedalto/contract/common/ids.ts";
 import type { EndpointRecord } from "@nedalto/contract/endpoint/types.ts";
 import type { NodeGateway } from "@nedalto/contract/node/ports.ts";
 import type { EndpointChanges, NodeRecord } from "@nedalto/contract/node/types.ts";
@@ -81,6 +82,16 @@ export function nextChanges<T>(gateway: NodeGateway, inspect: (changes: Endpoint
             }
         });
     });
+}
+
+/** Resolves once the node of the controller is connected, which it is not yet when its commissioning returns. */
+export async function untilConnected({ controller, bus }: TestController, nodeId: NodeId): Promise<void> {
+    if (controller.node.connectionOf(nodeId) !== "connected") {
+        await bus.next(
+            "node:connection-changed",
+            (change) => change.nodeId === nodeId && change.connection === "connected",
+        );
+    }
 }
 
 /** A simulated network with its own hosts, devices and controllers, closed when the test ends. */

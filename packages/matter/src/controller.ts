@@ -103,8 +103,9 @@ export class MatterController implements Controller {
         const identity = new Identity(this.#logger);
         const node = new MatterNodeGateway(this.#logger, this.#bus, identity, server);
         const endpoint = new MatterEndpointGateway(this.#bus, identity, server);
-        // @matter/node 0.18.0: the peers are read from storage on first access and start connecting when the
-        // server goes online, so hydrating before `start()` attaches the observers before any connection.
+        // @matter/node 0.18.0: the peers are read from storage on first access and start connecting when the server
+        // goes online, and a change of a peer is only announced once its node is registered, so all this comes before
+        // `start()`.
         identity.hydrate(server.peers, this.#nodeRepository, this.#endpointRepository);
         await server.start();
         this.#open = { server, node, endpoint };
@@ -118,7 +119,7 @@ export class MatterController implements Controller {
         }
         this.#open = undefined;
 
-        // Closing the server takes every peer offline, which would be announced as a disconnection of each node.
+        // Closing the server takes every peer offline, which would be announced as a change of connection of each node.
         open.node.close();
         open.endpoint.close();
         await open.server.close();

@@ -63,9 +63,6 @@ async function readOutcome(node: ClientNode, request: Read): Promise<AttributeOu
     return undefined;
 }
 
-const clusterBehaviors = (endpoint: Endpoint): ClusterBehavior.Type[] =>
-    Object.values(endpoint.behaviors.supported).filter(ClusterBehavior.is);
-
 /** The `EndpointGateway` over the peers of the controller node. */
 export class MatterEndpointGateway implements EndpointGateway {
     readonly #bus: DomainEventBus;
@@ -199,7 +196,8 @@ export class MatterEndpointGateway implements EndpointGateway {
             throw new EndpointNotFoundError(endpointId);
         }
         const endpoint = node.endpoints.for(number);
-        const clusters = clusterBehaviors(endpoint).map((behavior): ClusterState => {
+        const behaviors = Object.values(endpoint.behaviors.supported).filter(ClusterBehavior.is);
+        const clusters = behaviors.map((behavior): ClusterState => {
             const state = endpoint.stateOf(behavior.id);
             const attributes: AttributeState[] = [];
             // @matter/types 0.18.0: `ClusterType.attributes()` leaves the global attributes out of the cluster.

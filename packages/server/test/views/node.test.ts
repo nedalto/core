@@ -16,23 +16,23 @@ function setup() {
     nodeRepository.save(ONLINE);
     nodeRepository.save(OFFLINE);
     const nodeGateway = new FakeNodeGateway();
-    nodeGateway.reachable.add(ONLINE.id);
+    nodeGateway.connections.set(ONLINE.id, "connected");
     return { nodeRepository, nodeGateway, view: new NodeView({ nodeRepository, nodeGateway }) };
 }
 
 describe("NodeView", () => {
-    test("lists the stored nodes, each reachable as the gateway says", () => {
+    test("lists the stored nodes, each with the connection the gateway says", () => {
         assert.deepEqual(setup().view.list(), [
-            { id: ONLINE.id, reachable: true },
-            { id: OFFLINE.id, reachable: false },
+            { id: ONLINE.id, connection: "connected" },
+            { id: OFFLINE.id, connection: "disconnected" },
         ]);
     });
 
-    test("returns the node with the id, reachable as the gateway says", () => {
+    test("returns the node with the id and the connection the gateway says", () => {
         const { view } = setup();
 
-        assert.deepEqual(view.get(ONLINE.id), { id: ONLINE.id, reachable: true });
-        assert.deepEqual(view.get(OFFLINE.id), { id: OFFLINE.id, reachable: false });
+        assert.deepEqual(view.get(ONLINE.id), { id: ONLINE.id, connection: "connected" });
+        assert.deepEqual(view.get(OFFLINE.id), { id: OFFLINE.id, connection: "disconnected" });
     });
 
     test("throws NodeNotFoundError, naming the node, when the node is not stored", () => {

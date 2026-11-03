@@ -8,7 +8,7 @@ export interface NodeViewDeps {
     readonly nodeGateway: NodeGateway;
 }
 
-/** What a client sees of the nodes: the stored ones, each with whether it answers now. */
+/** What a client sees of the nodes: the stored ones, each with its connection now. */
 export class NodeView {
     readonly #repository: NodeRepository;
     readonly #gateway: NodeGateway;
@@ -32,6 +32,6 @@ export class NodeView {
     }
 
     #compose({ id }: NodeRecord): NodeState {
-        return { id, reachable: this.#gateway.isReachable(id) };
+        return { id, connection: this.#gateway.connectionOf(id) };
     }
 }

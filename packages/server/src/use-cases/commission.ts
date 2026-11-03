@@ -76,7 +76,7 @@ export class CommissionUseCase {
             }
         }
         this.#bus.emit("node:added", {
-            node: { id: node.id, reachable: this.#nodeGateway.isReachable(node.id) },
+            node: { id: node.id, connection: this.#nodeGateway.connectionOf(node.id) },
             endpoints: states,
             timestamp: Date.now(),
         });

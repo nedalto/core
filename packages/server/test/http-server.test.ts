@@ -427,18 +427,18 @@ describe("HttpServer", () => {
         assert.equal(roomRepository.records.size, 1);
     });
 
-    test("node.list returns the nodes with whether each is reachable", async (context) => {
+    test("node.list returns the nodes with the connection of each", async (context) => {
         const { connect, nodeRepository, nodeGateway } = await startServer(context);
         const online = createNode();
         const offline = createNode();
         nodeRepository.save(online);
         nodeRepository.save(offline);
-        nodeGateway.reachable.add(online.id);
+        nodeGateway.connections.set(online.id, "connected");
         const client = await connect();
 
         assert.deepEqual((await client.call("node.list")).result, [
-            { id: online.id, reachable: true },
-            { id: offline.id, reachable: false },
+            { id: online.id, connection: "connected" },
+            { id: offline.id, connection: "disconnected" },
         ]);
     });
 
@@ -452,7 +452,7 @@ describe("HttpServer", () => {
         const found = await client.call("node.get", { id: node.id });
         const notFound = await client.call("node.get", { id: missing });
 
-        assert.deepEqual(found.result, { id: node.id, reachable: false });
+        assert.deepEqual(found.result, { id: node.id, connection: "disconnected" });
         assert.partialDeepStrictEqual(notFound.error, { data: { code: "NOT_FOUND_ERROR", nodeId: missing } });
     });
 

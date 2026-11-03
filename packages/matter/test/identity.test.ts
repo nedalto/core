@@ -10,7 +10,7 @@ import { RecordingLogger } from "./helpers/logger.ts";
 import { TestNetwork } from "./helpers/network.ts";
 import { MemoryEndpointRepository, MemoryNodeRepository } from "./helpers/repository.ts";
 
-/** An `Identity`, the SDK node of a light, a record for it and an observable of the light that nothing else observes. */
+/** An `Identity`, the SDK node of a light and a record for it. */
 async function setup(t: TestContext) {
     const network = new TestNetwork(t);
     const { manualCode } = await network.startDevice();
@@ -24,9 +24,7 @@ async function setup(t: TestContext) {
         name: "Light",
         roomId: null,
     };
-    const changed = endpoint.eventsOf("onOff")["onOff$Changed"];
-    assert.ok(changed !== undefined);
-    return { identity: new Identity(new RecordingLogger()), node, record, changed };
+    return { identity: new Identity(new RecordingLogger()), node, record };
 }
 
 describe("Identity", () => {
@@ -47,73 +45,6 @@ describe("Identity", () => {
 
         assert.equal(identity.node(record.nodeId), undefined);
         assert.equal(identity.endpoint(record.id), undefined);
-    });
-
-    test("lets a subscription observe the nodes that are added after it", async (t) => {
-        const { identity, node, record, changed } = await setup(t);
-        identity.observe((observers) => {
-            observers.on(changed, () => {});
-        });
-        assert.equal(changed.isObserved, false);
-
-        identity.add(record.nodeId, node, [record]);
-
-        assert.equal(changed.isObserved, true);
-    });
-
-    test("gives a subscription the endpoints that were added with the node", async (t) => {
-        const { identity, node, record } = await setup(t);
-        const seen: unknown[] = [];
-        identity.observe((_observers, tracked) => {
-            seen.push(tracked.nodeId, tracked.node, [...tracked.endpoints]);
-        });
-
-        identity.add(record.nodeId, node, [record]);
-
-        assert.deepEqual(seen, [record.nodeId, node, [[record.id, record.matterNumber]]]);
-    });
-
-    test("closes the observers of a node when it is removed", async (t) => {
-        const { identity, node, record, changed } = await setup(t);
-        identity.observe((observers) => {
-            observers.on(changed, () => {});
-        });
-        identity.add(record.nodeId, node, [record]);
-
-        identity.remove(record.nodeId);
-
-        assert.equal(changed.isObserved, false);
-    });
-
-    test("closes the observers of every node and stops observing when the subscription is closed", async (t) => {
-        const { identity, node, record, changed } = await setup(t);
-        let attached = 0;
-        const unobserve = identity.observe((observers) => {
-            attached++;
-            observers.on(changed, () => {});
-        });
-        identity.add(record.nodeId, node, [record]);
-
-        unobserve();
-        identity.add(createNodeId(), node, []);
-
-        assert.equal(changed.isObserved, false);
-        assert.equal(attached, 1);
-    });
-
-    test("closes the observers of one subscription without touching those of another", async (t) => {
-        const { identity, node, record, changed } = await setup(t);
-        const first = identity.observe((observers) => {
-            observers.on(changed, () => {});
-        });
-        identity.observe((observers) => {
-            observers.on(changed, () => {});
-        });
-        identity.add(record.nodeId, node, [record]);
-
-        first();
-
-        assert.equal(changed.isObserved, true);
     });
 
     test("resolves an endpoint added to a registered node, and an endpoint id from its node and number", async (t) => {
