@@ -53,6 +53,18 @@ async function gatewayOverPeer(t: TestContext) {
     const identity = new Identity(logger);
     const gateway = new MatterNodeGateway(logger, bus, identity, peer.owner);
     t.after(() => gateway.close());
+    // A device closed before the subscription is live leaves the peer retrying, which holds up the end of the test.
+    if (peer.lifecycle.connectionState !== NodeConnectionState.Connected) {
+        await new Promise<void>((resolve) => {
+            const connected = (state: NodeConnectionState): void => {
+                if (state === NodeConnectionState.Connected) {
+                    peer.lifecycle.connectionStateChanged.off(connected);
+                    resolve();
+                }
+            };
+            peer.lifecycle.connectionStateChanged.on(connected);
+        });
+    }
     // Observed after the gateway, so that when it resolves the gateway has already had its turn.
     const nextChange = (): Promise<void> =>
         new Promise((resolve) => {
