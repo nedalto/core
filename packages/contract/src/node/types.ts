@@ -9,12 +9,16 @@ export interface NodeRecord {
     readonly matterId: bigint;
 }
 
+/**
+ * How the hub stands with a node now. Only `connected` means that its data is up to date.
+ * See `docs/protocol.md` for what each value means to a client.
+ */
+export type NodeConnection = "connected" | "disconnected" | "reconnecting" | "waiting-for-discovery";
+
 /** What a client sees of a node. */
 export interface NodeState {
     readonly id: NodeId;
-
-    /** Whether the node has a live connection now. */
-    readonly reachable: boolean;
+    readonly connection: NodeConnection;
 }
 
 /** What a node reports about itself, from its Basic Information cluster. */

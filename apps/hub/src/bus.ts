@@ -12,8 +12,7 @@ class SyncEventBus implements DomainEventBus {
     readonly #subscriptions: Subscriptions = {
         "node:added": new Set(),
         "node:removed": new Set(),
-        "node:connected": new Set(),
-        "node:disconnected": new Set(),
+        "node:connection-changed": new Set(),
         "endpoint:added": new Set(),
         "endpoint:removed": new Set(),
         "endpoint:changed": new Set(),

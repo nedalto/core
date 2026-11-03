@@ -12,8 +12,7 @@ export type DomainEventBus = EventBus<DomainEventMap>;
 const eventFlags = {
     "node:added": true,
     "node:removed": true,
-    "node:connected": true,
-    "node:disconnected": true,
+    "node:connection-changed": true,
     "endpoint:added": true,
     "endpoint:removed": true,
     "endpoint:changed": true,

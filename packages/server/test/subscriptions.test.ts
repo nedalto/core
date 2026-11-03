@@ -22,7 +22,7 @@ describe("Subscriptions", () => {
         nodeRepository.save(online);
         endpointRepository.save(light);
         roomRepository.save(KITCHEN);
-        nodeGateway.reachable.add(online.id);
+        nodeGateway.connections.set(online.id, "connected");
         endpointGateway.shapes.set(light.id, LIGHT_SHAPE);
         const client = await connect();
 
@@ -33,8 +33,8 @@ describe("Subscriptions", () => {
             id: 1,
             result: {
                 nodes: [
-                    { id: asleep.id, reachable: false },
-                    { id: online.id, reachable: true },
+                    { id: asleep.id, connection: "disconnected" },
+                    { id: online.id, connection: "connected" },
                 ],
                 endpoints: [stateOf(light)],
                 rooms: [KITCHEN],
@@ -78,7 +78,7 @@ describe("Subscriptions", () => {
             jsonrpc: "2.0",
             method: "node:added",
             params: {
-                node: { id: node.id, reachable: false },
+                node: { id: node.id, connection: "disconnected" },
                 endpoints: lights.map((light) => stateOf(light)),
                 timestamp: 1_000,
             },
@@ -294,6 +294,21 @@ describe("Subscriptions", () => {
         assert.deepEqual(logger.at("info"), [
             ["request failed", "hub.subscribe", "UNREACHABLE_ERROR", "Asleep", "cause:", "Error: no answer"],
         ]);
+    });
+
+    test("forwards node:connection-changed to a subscriber as the bus carries it", async (context) => {
+        const { connect, bus } = await startServer(context);
+        const client = await connect();
+        await client.call("hub.subscribe");
+        const payload = { nodeId: createNode().id, connection: "reconnecting", timestamp: 1 } as const;
+
+        bus.emit("node:connection-changed", payload);
+
+        assert.deepEqual(await client.inbox.next(), {
+            jsonrpc: "2.0",
+            method: "node:connection-changed",
+            params: payload,
+        });
     });
 
     test("answers invalid params, and does not subscribe, when the params are not empty", async (context) => {

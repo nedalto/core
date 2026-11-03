@@ -68,7 +68,7 @@ describe("CommissionUseCase", () => {
     test("emits node:added with the node and the state of every endpoint it stored", async (context) => {
         context.mock.timers.enable({ apis: ["Date"], now: 1_000 });
         const { bus, nodeGateway, useCase } = setup();
-        nodeGateway.reachable.add(NODE.id);
+        nodeGateway.connections.set(NODE.id, "connected");
 
         await useCase.execute("34970112332");
 
@@ -76,7 +76,7 @@ describe("CommissionUseCase", () => {
             {
                 name: "node:added",
                 payload: {
-                    node: { id: NODE.id, reachable: true },
+                    node: { id: NODE.id, connection: "connected" },
                     endpoints: [stateOf(FIRST), stateOf(SECOND)],
                     timestamp: 1_000,
                 },
@@ -116,7 +116,11 @@ describe("CommissionUseCase", () => {
         assert.deepEqual(bus.emitted, [
             {
                 name: "node:added",
-                payload: { node: { id: NODE.id, reachable: false }, endpoints: [stateOf(FIRST)], timestamp: 1_000 },
+                payload: {
+                    node: { id: NODE.id, connection: "disconnected" },
+                    endpoints: [stateOf(FIRST)],
+                    timestamp: 1_000,
+                },
             },
         ]);
         assert.equal(logger.at("warn").length, 1);

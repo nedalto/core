@@ -1,8 +1,6 @@
 import "./sdk-config.ts";
-import { ObserverGroup } from "@matter/main";
 import type { ClientNode } from "@matter/main/node";
 
-import type { Unsubscribe } from "@nedalto/contract/common/bus.ts";
 import type { EndpointId, NodeId } from "@nedalto/contract/common/ids.ts";
 import type { EndpointRepository } from "@nedalto/contract/endpoint/ports.ts";
 import type { EndpointRecord } from "@nedalto/contract/endpoint/types.ts";
@@ -27,24 +25,14 @@ interface RegisteredNode extends TrackedNode {
     readonly endpoints: Map<EndpointId, number>;
 }
 
-/** Puts the observers of a gateway for a node on `observers`, which `Identity` closes when the node is removed. */
-export type Attach = (observers: ObserverGroup, tracked: TrackedNode) => void;
-
-interface Subscription {
-    readonly attach: Attach;
-    readonly groups: Map<NodeId, ObserverGroup>;
-}
-
 /**
  * The translation from our ids to the SDK's: a `NodeId` to its node, and an `EndpointId` to its node and endpoint
- * number.
- * The gateways share it, so it is also where they learn that a node was added or removed.
+ * number, and back.
  */
 export class Identity {
     readonly #logger: Logger;
     readonly #nodes = new Map<NodeId, RegisteredNode>();
     readonly #endpoints = new Map<EndpointId, PeerEndpoint>();
-    readonly #subscriptions = new Set<Subscription>();
 
     constructor(logger: Logger) {
         this.#logger = logger;
@@ -81,7 +69,7 @@ export class Identity {
         return undefined;
     }
 
-    /** Registers the node with its endpoints, and lets each subscription observe it. */
+    /** Registers the node with its endpoints. */
     add(nodeId: NodeId, node: ClientNode, endpoints: readonly EndpointRecord[]): void {
         const tracked: RegisteredNode = {
             nodeId,
@@ -92,14 +80,9 @@ export class Identity {
         for (const [endpointId, number] of tracked.endpoints) {
             this.#endpoints.set(endpointId, { nodeId, node, number });
         }
-        for (const { attach, groups } of this.#subscriptions) {
-            const observers = new ObserverGroup();
-            groups.set(nodeId, observers);
-            attach(observers, tracked);
-        }
     }
 
-    /** Forgets the node and its endpoints, and closes the observers that the subscriptions attached to it. */
+    /** Forgets the node and its endpoints. */
     remove(nodeId: NodeId): void {
         const tracked = this.#nodes.get(nodeId);
         if (tracked === undefined) {
@@ -109,10 +92,6 @@ export class Identity {
             this.#endpoints.delete(endpointId);
         }
         this.#nodes.delete(nodeId);
-        for (const { groups } of this.#subscriptions) {
-            groups.get(nodeId)?.close();
-            groups.delete(nodeId);
-        }
     }
 
     /** Registers `added` and forgets `removed` on a registered node. */
@@ -129,24 +108,6 @@ export class Identity {
             tracked.endpoints.set(id, matterNumber);
             this.#endpoints.set(id, { nodeId, node: tracked.node, number: matterNumber });
         }
-    }
-
-    /**
-     * Calls `attach` for each node added from now on.
-     * The SDK's observables hand out no unsubscribe handle and a decommissioned node stays alive, so the group
-     * that `attach` receives is what detaches its observers: it is closed when the node is removed, and all of
-     * them when the returned function is called.
-     */
-    observe(attach: Attach): Unsubscribe {
-        const subscription: Subscription = { attach, groups: new Map() };
-        this.#subscriptions.add(subscription);
-        return () => {
-            this.#subscriptions.delete(subscription);
-            for (const observers of subscription.groups.values()) {
-                observers.close();
-            }
-            subscription.groups.clear();
-        };
     }
 
     /**

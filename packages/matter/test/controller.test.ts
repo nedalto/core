@@ -6,7 +6,7 @@ import { InternalError } from "@nedalto/contract/common/errors.ts";
 import { createNodeId } from "@nedalto/contract/common/ids.ts";
 import { NodeNotFoundError } from "@nedalto/contract/node/errors.ts";
 
-import { TestNetwork } from "./helpers/network.ts";
+import { TestNetwork, untilConnected } from "./helpers/network.ts";
 
 const ON_OFF = 0x06;
 const ON_OFF_ATTRIBUTE = 0x0000;
@@ -37,12 +37,15 @@ describe("MatterController", () => {
     test("stop() does not announce the nodes going offline", async (t) => {
         const network = new TestNetwork(t);
         const { manualCode } = await network.startDevice();
-        const { controller, bus } = await network.startController();
-        await controller.node.commission(manualCode);
+        const started = await network.startController();
+        const { controller, bus } = started;
+        const { node } = await controller.node.commission(manualCode);
+        await untilConnected(started, node.id);
+        const before = bus.emitted.length;
 
         await controller.stop();
 
-        assert.deepEqual(bus.emitted, []);
+        assert.deepEqual(bus.emitted.slice(before), []);
     });
 
     test("start() makes a node of the repository available again on the same storage", async (t) => {

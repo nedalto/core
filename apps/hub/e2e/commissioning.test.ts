@@ -85,6 +85,29 @@ describe("commissioning", () => {
         assert.equal(light.isOn(), true);
     });
 
+    test("reports the node as connected after the hub restarts", async (t) => {
+        const root = await scratchDirectory(t, "nedalto-e2e-hub-");
+        const light = await startLight(t);
+        const first = await startHub(t, { root });
+        const before = await connect(t, first.url);
+        const id = await before.call("node.commission", { setupCode: light.manualPairingCode });
+        await first.stop();
+
+        const second = await startHub(t, { root });
+        const after = await connect(t, second.url);
+        const snapshot = await after.call("hub.subscribe");
+        assert.ok(isRecord(snapshot) && Array.isArray(snapshot.nodes));
+
+        // The node connects when it can, which can come before or after the subscription.
+        if (!snapshot.nodes.some((node) => isRecord(node) && node.id === id && node.connection === "connected")) {
+            await after.notification(
+                "node:connection-changed",
+                (params) => isRecord(params) && params.nodeId === id && params.connection === "connected",
+            );
+        }
+        assert.partialDeepStrictEqual(await after.call("node.list"), [{ id, connection: "connected" }]);
+    });
+
     test("keeps the node and its endpoints after the hub restarts", async (t) => {
         const root = await scratchDirectory(t, "nedalto-e2e-hub-");
         const light = await startLight(t);
@@ -98,7 +121,7 @@ describe("commissioning", () => {
         const second = await startHub(t, { root });
         const after = await connect(t, second.url);
 
-        // Compared by id: whether the node is reachable again yet is up to the controller.
+        // Compared by id: whether the node is connected again yet is up to the controller.
         assert.deepEqual(ids(await after.call("node.list")), ids(nodes));
         assert.deepEqual(ids(await after.call("endpoint.list")), ids(endpoints));
         assert.equal(ids(nodes).length, 1);

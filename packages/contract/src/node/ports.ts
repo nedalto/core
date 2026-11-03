@@ -1,6 +1,6 @@
 import type { Unsubscribe } from "../common/bus.ts";
 import type { NodeId } from "../common/ids.ts";
-import type { CommissioningResult, EndpointChanges, NodeInfo, NodeRecord } from "./types.ts";
+import type { CommissioningResult, EndpointChanges, NodeConnection, NodeInfo, NodeRecord } from "./types.ts";
 
 /** Persistence of nodes. */
 export interface NodeRepository {
@@ -43,8 +43,8 @@ export interface NodeGateway {
      */
     decommission(nodeId: NodeId, force?: boolean): Promise<void>;
 
-    /** Whether the node has a live connection now. It does not contact the device, and an unknown node is not reachable. */
-    isReachable(nodeId: NodeId): boolean;
+    /** How the hub stands with the node now. It does not contact the device, and an unknown node is `disconnected`. */
+    connectionOf(nodeId: NodeId): NodeConnection;
 
     /** Throws `NodeNotFoundError` for an unknown node. */
     getInfo(nodeId: NodeId): NodeInfo;

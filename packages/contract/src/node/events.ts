@@ -1,6 +1,6 @@
 import type { NodeId } from "../common/ids.ts";
 import type { EndpointState } from "../endpoint/types.ts";
-import type { NodeState } from "./types.ts";
+import type { NodeConnection, NodeState } from "./types.ts";
 
 /** Events about nodes. Names follow `<subject>:<verb-past-tense>`. */
 export interface NodeEvents {
@@ -17,15 +17,10 @@ export interface NodeEvents {
         readonly timestamp: number;
     };
 
-    /** The node answers: a session was established or re-established. */
-    "node:connected": {
+    /** The connection of the node took a new value, on each change and as it is. */
+    "node:connection-changed": {
         readonly nodeId: NodeId;
-        readonly timestamp: number;
-    };
-
-    /** The node stopped answering, but still belongs to the fabric. */
-    "node:disconnected": {
-        readonly nodeId: NodeId;
+        readonly connection: NodeConnection;
         readonly timestamp: number;
     };
 }

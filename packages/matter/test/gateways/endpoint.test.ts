@@ -363,7 +363,7 @@ describe("MatterEndpointGateway", () => {
 
         const shape = restarted.controller.endpoint.describe(light.id);
 
-        assert.equal(restarted.controller.node.isReachable(node.id), false);
+        assert.notEqual(restarted.controller.node.connectionOf(node.id), "connected");
         assert.equal(shape.deviceType, 0x0100);
         const onOff = shape.clusters.find(({ id }) => id === ON_OFF);
         assert.deepEqual(
