@@ -10,9 +10,30 @@
   "env": { "node": true },
   "rules": {
     "no-console": "warn",
-    "typescript/no-misused-promises": "error",
-    "typescript/switch-exhaustiveness-check": "error",
+    "no-restricted-imports": [
+      "error",
+      {
+        "patterns": [
+          {
+            "group": ["@nedalto/**", "!@nedalto/contract/**"],
+            "message": "Only apps/hub composes the packages; elsewhere import @nedalto/contract subpaths only."
+          }
+        ]
+      }
+    ],
+    "typescript/ban-ts-comment": "error",
     "typescript/no-deprecated": "warn",
+    "typescript/no-misused-promises": "error",
+    "typescript/no-unsafe-type-assertion": "error",
+    "typescript/switch-exhaustiveness-check": "error",
     "unicorn/filename-case": ["error", { "case": "kebabCase" }]
-  }
+  },
+  "overrides": [
+    {
+      "files": ["apps/hub/**/*.ts"],
+      "rules": {
+        "no-restricted-imports": "off"
+      }
+    }
+  ]
 }
