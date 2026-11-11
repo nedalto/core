@@ -1,0 +1,32 @@
+{
+  "languages": {
+    "JavaScript": {
+      "language_servers": ["!vtsls", "!typescript-language-server", "!eslint", "!tailwindcss-language-server", "..."],
+      "code_actions_on_format": { "source.fixAll.oxc": true },
+      "formatter": { "language_server": { "name": "oxfmt" } },
+      "format_on_save": "on"
+    },
+    "JSON": {
+      "formatter": { "language_server": { "name": "oxfmt" } },
+      "format_on_save": "on"
+    },
+    "JSONC": {
+      "formatter": { "language_server": { "name": "oxfmt" } },
+      "format_on_save": "on"
+    },
+    "Markdown": {
+      "formatter": { "language_server": { "name": "oxfmt" } },
+      "format_on_save": "on"
+    },
+    "TypeScript": {
+      "language_servers": ["!vtsls", "!typescript-language-server", "!eslint", "!tailwindcss-language-server", "..."],
+      "code_actions_on_format": { "source.fixAll.oxc": true },
+      "formatter": { "language_server": { "name": "oxfmt" } },
+      "format_on_save": "on"
+    },
+    "YAML": {
+      "formatter": { "language_server": { "name": "oxfmt" } },
+      "format_on_save": "on"
+    }
+  }
+}

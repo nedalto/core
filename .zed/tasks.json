@@ -1,0 +1,10 @@
+[
+  {
+    "label": "Type",
+    "command": "npm run --workspaces type"
+  },
+  {
+    "label": "Test",
+    "command": "npm run --workspaces test"
+  }
+]
