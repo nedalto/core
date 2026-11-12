@@ -57,5 +57,6 @@ Before calling a change done, review its diff as a reviewer would: every changed
 - Markdown: one sentence per line, no hard wrapping.
 - Name an interface after its role and its implementation after the technology behind it (`Database`, `SqliteDatabase`, `createSqliteDatabase`); no `Provider` or `Manager` suffixes.
 - Do not name a declaration after an export of a module it is used alongside (`Server` from `node:http`); where two such names meet, alias the module's import (`Logger as SdkLogger`).
+- A package's `exports` lists only the modules `apps/hub` imports; `packages/contract` alone exports every module.
 - Collaborators passed as one object have a `…Deps` type and are destructured in the signature.
 - A standalone function is an arrow when its body is a single expression and a `function` declaration otherwise; functions held in object properties and inline callbacks are arrows.
