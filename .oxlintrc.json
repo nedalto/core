@@ -23,6 +23,10 @@
     ],
     "typescript/ban-ts-comment": "error",
     "typescript/no-deprecated": "warn",
+    "typescript/no-floating-promises": [
+      "error",
+      { "allowForKnownSafeCalls": [{ "from": "package", "package": "node:test", "name": ["describe", "test"] }] }
+    ],
     "typescript/no-misused-promises": "error",
     "typescript/no-unsafe-type-assertion": "error",
     "typescript/switch-exhaustiveness-check": "error",
