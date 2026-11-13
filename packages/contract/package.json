@@ -16,6 +16,9 @@
     "type": "tsc",
     "test": "node --test \"test/**/*.test.ts\""
   },
+  "dependencies": {
+    "valibot": "^1.5.0"
+  },
   "devDependencies": {
     "@types/node": "^26.6.6"
   }
