@@ -5,6 +5,7 @@ import { createStream, type RotatingFileStream } from "rotating-file-stream";
 
 import { InternalError } from "@nedalto/contract/common/errors.ts";
 import type { Lifecycle } from "@nedalto/contract/common/lifecycle.ts";
+import type { LoggerConfig } from "@nedalto/contract/config/schemas.ts";
 
 /** A log file exposed as a writable stream, for a `Logger` or another writer to share. */
 export interface LogFile extends Lifecycle {
@@ -12,12 +13,7 @@ export interface LogFile extends Lifecycle {
     readonly stream: Writable;
 }
 
-export interface RotationOptions {
-    /** Size at which the file rotates, as `<integer><B|K|M|G>`, for example `"10M"`. */
-    readonly maxFileSize: string;
-    /** Rotated files kept besides the current one. */
-    readonly maxFiles: number;
-}
+export type RotationOptions = Pick<LoggerConfig, "maxFileSize" | "maxFiles">;
 
 class RotatingLogFile implements LogFile {
     readonly #directory: string;

@@ -1,12 +1,35 @@
-type ErrorCode = "INTERNAL_ERROR";
+type ErrorCode = "VALIDATION_ERROR" | "INTERNAL_ERROR";
+
+interface AppErrorOptions extends ErrorOptions {
+    data?: Readonly<Record<string, unknown>>;
+}
 
 /** Base of the errors a client can receive. `cause` is for the log only. */
 export abstract class AppError extends Error {
     abstract readonly code: ErrorCode;
+    readonly data: Readonly<Record<string, unknown>> | undefined;
 
-    constructor(message: string, options?: ErrorOptions) {
+    constructor(message: string, options?: AppErrorOptions) {
         super(message, options);
         this.name = new.target.name;
+        this.data = options?.data;
+    }
+}
+
+/** A part of the input that is invalid: `path` is dotted (`"server.port"`) and `null` for the input itself. */
+export type ValidationIssue = { readonly path: string | null; readonly message: string };
+
+interface ValidationErrorOptions extends ErrorOptions {
+    issues: readonly ValidationIssue[];
+}
+
+/** The input is invalid; `data.issues` says where and why. */
+export class ValidationError extends AppError {
+    readonly code = "VALIDATION_ERROR";
+    declare readonly data: { readonly issues: readonly ValidationIssue[] };
+
+    constructor(message: string, { issues, cause }: ValidationErrorOptions) {
+        super(message, { cause, data: { issues } });
     }
 }
 

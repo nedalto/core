@@ -9,9 +9,16 @@
     "directory": "packages/config"
   },
   "type": "module",
+  "exports": {
+    "./config.ts": "./src/config.ts",
+    "./environment.ts": "./src/environment.ts"
+  },
   "scripts": {
     "type": "tsc",
     "test": "node --test \"test/**/*.test.ts\""
+  },
+  "dependencies": {
+    "@nedalto/contract": "*"
   },
   "devDependencies": {
     "@types/node": "^26.6.6"
