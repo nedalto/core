@@ -38,6 +38,12 @@
       "rules": {
         "no-restricted-imports": "off"
       }
+    },
+    {
+      "files": ["packages/contract/src/common/ids.ts", "packages/database/src/rows.ts"],
+      "rules": {
+        "typescript/no-unsafe-type-assertion": "off"
+      }
     }
   ]
 }
