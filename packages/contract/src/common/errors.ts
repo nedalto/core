@@ -1,4 +1,4 @@
-type ErrorCode = "VALIDATION_ERROR" | "INTERNAL_ERROR";
+type ErrorCode = "VALIDATION_ERROR" | "NOT_FOUND_ERROR" | "INTEGRATION_ERROR" | "INTERNAL_ERROR";
 
 interface AppErrorOptions extends ErrorOptions {
     data?: Readonly<Record<string, unknown>>;
@@ -31,6 +31,16 @@ export class ValidationError extends AppError {
     constructor(message: string, { issues, cause }: ValidationErrorOptions) {
         super(message, { cause, data: { issues } });
     }
+}
+
+/** The entity the request names does not exist. */
+export class NotFoundError extends AppError {
+    readonly code = "NOT_FOUND_ERROR";
+}
+
+/** A system outside the hub failed, such as SQLite. */
+export class IntegrationError extends AppError {
+    readonly code = "INTEGRATION_ERROR";
 }
 
 /** An unexpected failure: a bug. */

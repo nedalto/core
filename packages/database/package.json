@@ -9,9 +9,15 @@
     "directory": "packages/database"
   },
   "type": "module",
+  "exports": {
+    "./database.ts": "./src/database.ts"
+  },
   "scripts": {
     "type": "tsc",
     "test": "node --test \"test/**/*.test.ts\""
+  },
+  "dependencies": {
+    "@nedalto/contract": "*"
   },
   "devDependencies": {
     "@types/node": "^26.6.6"
