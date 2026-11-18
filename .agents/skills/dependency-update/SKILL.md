@@ -17,3 +17,7 @@ A runtime dependency, or any release of a 0.x package, where a minor version may
 4. Note what the update makes unnecessary or simpler (a workaround it fixes, code a new feature replaces) and propose it as a separate pull request.
 5. Run the verification.
 6. Report what affects this repository, what was adapted and what follow-up is proposed.
+
+## Matter SDK
+
+- Recheck every comment citing the old `@matter/main` version against the new code under `node_modules/@matter/`, then update its version or delete it.

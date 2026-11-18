@@ -54,6 +54,8 @@ const matterConfigSchema = strictSection({
     networkInterface: v.optional(v.pipe(v.string(), v.minLength(1, "networkInterface must not be empty"))),
 });
 
+export type MatterConfig = v.InferOutput<typeof matterConfigSchema>;
+
 const configSchema = strictSection({
     server: v.optional(serverConfigSchema, {}),
     logger: v.optional(loggerConfigSchema, {}),

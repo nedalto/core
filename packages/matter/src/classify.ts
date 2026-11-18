@@ -1,0 +1,93 @@
+import "./sdk-config.ts";
+import { causedBy, DestroyedDependencyError, NoResponseTimeoutError, TimeoutError } from "@matter/main";
+import {
+    DiscoveryAggregateError,
+    DiscoveryError,
+    DiscoveryIncompleteError,
+    FabricOperationInProgressError,
+    IcdPeerAsleepError,
+    NoDiscoveryTransportError,
+} from "@matter/main/node";
+import {
+    CommissioningTimeoutError,
+    DeviceAlreadyCommissionedToThisFabricError,
+    MaximumCommissionedFabricsReachedError,
+    PasscodeMismatchError,
+    TransientPeerCommunicationError,
+} from "@matter/main/protocol";
+
+import { type AppError, IntegrationError } from "@nedalto/contract/common/errors.ts";
+import type { NodeId } from "@nedalto/contract/common/ids.ts";
+import {
+    CommissioningFailedError,
+    CommissioningRejectedError,
+    DecommissioningRejectedError,
+    NodeNotFoundError,
+    NodeUnreachableError,
+} from "@nedalto/contract/node/errors.ts";
+
+/** The contract error for what the SDK threw while commissioning, which keeps it as the `cause`. */
+export function classifyCommissioningError(error: unknown): AppError {
+    // @matter/node 0.18.0: `NoDiscoveryTransportError` and `DiscoveryIncompleteError` are subtypes of `DiscoveryError`,
+    // so they go first: a hub without scanners is not something a client can act on, and a device that was found
+    // but whose attempts did not finish was not missing.
+    if (error instanceof NoDiscoveryTransportError) {
+        return new IntegrationError("Commissioning failed", { cause: error });
+    }
+    if (error instanceof DiscoveryIncompleteError) {
+        return new CommissioningFailedError("pairing-failed", error);
+    }
+    if (error instanceof DiscoveryError) {
+        return new CommissioningFailedError("not-found", error);
+    }
+    if (error instanceof DiscoveryAggregateError) {
+        // The manual code carries 4 bits of the discriminator, so the passcode may have been rejected by another
+        // device in pairing mode: the hub knows it was rejected, not that it was mistyped.
+        // @matter/node 0.18.0: the errors of an aggregate may wrap the `PasscodeMismatchError` as a cause.
+        const rejected = error.errors.every((cause) => causedBy(cause, PasscodeMismatchError));
+        return new CommissioningFailedError(rejected ? "passcode-rejected" : "pairing-failed", error);
+    }
+    if (error instanceof DeviceAlreadyCommissionedToThisFabricError) {
+        return new CommissioningRejectedError("already-commissioned", error);
+    }
+    if (error instanceof MaximumCommissionedFabricsReachedError) {
+        return new CommissioningRejectedError("fabric-table-full", error);
+    }
+    // @matter/protocol 0.18.0: a step throws a timeout as it is, and `OperativeConnectionFailedError` wraps the one of
+    // the operational reconnection as its cause.
+    if (causedBy(error, CommissioningTimeoutError, TimeoutError)) {
+        return new CommissioningFailedError("pairing-failed", error);
+    }
+    return new IntegrationError("Commissioning failed", { cause: error });
+}
+
+/** Why the peer did not answer, or `undefined` when the error is not about reaching it. */
+function unreachableReason(error: unknown): "asleep" | "offline" | undefined {
+    // A sleeping device is also one that does not answer, so it is told apart first.
+    if (causedBy(error, IcdPeerAsleepError)) {
+        return "asleep";
+    }
+    // @matter/protocol 0.18.0: a peer that cannot be reached fails the operation with an `AbortedError` whose cause
+    // is a `PeerUnreachableError`, a subtype of `TransientPeerCommunicationError`.
+    if (causedBy(error, NoResponseTimeoutError, TransientPeerCommunicationError)) {
+        return "offline";
+    }
+    return undefined;
+}
+
+/** The contract error for what the SDK threw while removing the node, which keeps it as the `cause`. */
+export function classifyDecommissioningError(nodeId: NodeId, error: unknown): AppError {
+    const reason = unreachableReason(error);
+    if (reason !== undefined) {
+        return new NodeUnreachableError(nodeId, reason, error);
+    }
+    // @matter/node 0.18.0: the SDK refuses a second operation on a node that has one running.
+    if (error instanceof FabricOperationInProgressError) {
+        return new DecommissioningRejectedError(nodeId, "in-progress", error);
+    }
+    // @matter/node 0.18.0: the SDK has already deleted the node, e.g. because the device left the fabric.
+    if (error instanceof DestroyedDependencyError) {
+        return new NodeNotFoundError(nodeId, error);
+    }
+    return new IntegrationError("Decommissioning failed", { cause: error, data: { nodeId } });
+}

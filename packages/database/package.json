@@ -14,7 +14,7 @@
   },
   "scripts": {
     "type": "tsc",
-    "test": "node --test \"test/**/*.test.ts\""
+    "test": "node --test --test-timeout=30000 \"test/**/*.test.ts\""
   },
   "dependencies": {
     "@nedalto/contract": "*"

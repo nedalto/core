@@ -1,4 +1,10 @@
-type ErrorCode = "VALIDATION_ERROR" | "NOT_FOUND_ERROR" | "INTEGRATION_ERROR" | "INTERNAL_ERROR";
+type ErrorCode =
+    | "VALIDATION_ERROR"
+    | "NOT_FOUND_ERROR"
+    | "CONFLICT_ERROR"
+    | "INTEGRATION_ERROR"
+    | "UNREACHABLE_ERROR"
+    | "INTERNAL_ERROR";
 
 interface AppErrorOptions extends ErrorOptions {
     data?: Readonly<Record<string, unknown>>;
@@ -38,9 +44,19 @@ export class NotFoundError extends AppError {
     readonly code = "NOT_FOUND_ERROR";
 }
 
-/** A system outside the hub failed, such as SQLite. */
+/** The request contradicts the current state. */
+export class ConflictError extends AppError {
+    readonly code = "CONFLICT_ERROR";
+}
+
+/** A system outside the hub failed: the Matter SDK, SQLite. */
 export class IntegrationError extends AppError {
     readonly code = "INTEGRATION_ERROR";
+}
+
+/** The target could not be reached, so the request never arrived. */
+export class UnreachableError extends AppError {
+    readonly code = "UNREACHABLE_ERROR";
 }
 
 /** An unexpected failure: a bug. */
