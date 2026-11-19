@@ -14,6 +14,9 @@ Resolving them creates no directory and reads no file.
 | `NEDALTO_STORAGE_PATH` | `~/.nedalto/storage` | Directory where the hub persists its state.            |
 | `NEDALTO_LOG_PATH`     | `~/.nedalto/log`     | Directory where the log files are written and rotated. |
 
+Back up and restore the `NEDALTO_STORAGE_PATH` directory as a whole.
+The hub names devices after the ids that the Matter storage in it gave them, so a part restored from another moment can name the wrong devices.
+
 The token has no default and none is generated.
 It must be at least 8 characters long.
 It may contain only ASCII letters, digits, the characters `-_.~!#$%&'*+^|` and the backtick.

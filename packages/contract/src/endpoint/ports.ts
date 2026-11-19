@@ -1,5 +1,5 @@
 import type { EndpointId, NodeId, RoomId } from "../common/ids.ts";
-import type { EndpointRecord, NewEndpoint } from "./types.ts";
+import type { EndpointRecord, DeviceEndpoint } from "./types.ts";
 
 /** Persistence of endpoints. */
 export interface EndpointRepository {
@@ -8,7 +8,7 @@ export interface EndpointRepository {
     findByNode(nodeId: NodeId): EndpointRecord[];
 
     /** Its node must already be stored. */
-    create(endpoint: NewEndpoint): EndpointRecord;
+    create(endpoint: DeviceEndpoint): EndpointRecord;
 
     /** Throws `EndpointNotFoundError` if the endpoint does not exist. */
     setName(id: EndpointId, name: string): void;

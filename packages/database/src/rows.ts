@@ -17,7 +17,8 @@ import type { RoomRecord } from "@nedalto/contract/room/types.ts";
 /**
  * A row as node:sqlite returns it, every column untyped. The assertions on rows are safe because
  * every table is STRICT: SQLite checks the type of each column when it is written, so what a
- * column holds on reading is what its declaration says.
+ * column holds on reading is what its declaration says. Every INTEGER comes out as a bigint
+ * (the connection sets `readBigInts`), so a column the record holds as a number is converted here.
  */
 type Row = Record<string, SQLOutputValue>;
 

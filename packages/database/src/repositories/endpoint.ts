@@ -3,7 +3,7 @@ import type { DatabaseSync, StatementSync } from "node:sqlite";
 import type { EndpointId, NodeId, RoomId } from "@nedalto/contract/common/ids.ts";
 import { EndpointNotFoundError } from "@nedalto/contract/endpoint/errors.ts";
 import type { EndpointRepository } from "@nedalto/contract/endpoint/ports.ts";
-import type { EndpointRecord, NewEndpoint } from "@nedalto/contract/endpoint/types.ts";
+import type { EndpointRecord, DeviceEndpoint } from "@nedalto/contract/endpoint/types.ts";
 
 import { insertedRow, toEndpointRecord, toStoredEndpointKey, toStoredNodeId, toStoredRoomId } from "../rows.ts";
 
@@ -45,7 +45,7 @@ export class SqliteEndpointRepository implements EndpointRepository {
         return this.#findByNode.all(toStoredNodeId(nodeId)).map(toEndpointRecord);
     }
 
-    create({ nodeId, number, name }: NewEndpoint): EndpointRecord {
+    create({ nodeId, number, name }: DeviceEndpoint): EndpointRecord {
         return toEndpointRecord(insertedRow(this.#insert, toStoredNodeId(nodeId), number, name));
     }
 

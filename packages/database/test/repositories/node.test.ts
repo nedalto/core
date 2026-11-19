@@ -74,7 +74,7 @@ describe("SqliteNodeRepository", () => {
         assert.throws(
             () => node.delete(id),
             (error) =>
-                error instanceof NodeNotFoundError && error.code === "NOT_FOUND_ERROR" && error.data?.nodeId === id,
+                error instanceof NodeNotFoundError && error.code === "NOT_FOUND_ERROR" && error.data.nodeId === id,
         );
     });
 

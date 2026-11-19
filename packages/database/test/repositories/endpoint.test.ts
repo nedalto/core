@@ -3,23 +3,23 @@ import { describe, test } from "node:test";
 
 import { type EndpointId, type NodeId, toEndpointId, toNodeId } from "@nedalto/contract/common/ids.ts";
 import { EndpointNotFoundError } from "@nedalto/contract/endpoint/errors.ts";
-import type { NewEndpoint } from "@nedalto/contract/endpoint/types.ts";
+import type { DeviceEndpoint } from "@nedalto/contract/endpoint/types.ts";
 
 import { openDatabase } from "../helpers/database.ts";
 
-const newEndpoint = (nodeId: NodeId, number: number, name = "Light"): NewEndpoint => ({ nodeId, number, name });
+const deviceEndpoint = (nodeId: NodeId, number: number, name = "Light"): DeviceEndpoint => ({ nodeId, number, name });
 
 const isEndpointNotFound =
     (id: EndpointId) =>
     (error: unknown): boolean =>
-        error instanceof EndpointNotFoundError && error.code === "NOT_FOUND_ERROR" && error.data?.endpointId === id;
+        error instanceof EndpointNotFoundError && error.code === "NOT_FOUND_ERROR" && error.data.endpointId === id;
 
 describe("SqliteEndpointRepository", () => {
     test("creates the endpoint without a room and returns it as stored", async (context) => {
         const { node, endpoint } = await openDatabase(context);
         const { id: nodeId } = node.create(toNodeId(1n));
 
-        const created = endpoint.create(newEndpoint(nodeId, 2));
+        const created = endpoint.create(deviceEndpoint(nodeId, 2));
 
         assert.deepEqual(created, { id: toEndpointId(nodeId, 2), nodeId, number: 2, name: "Light", roomId: null });
         assert.deepEqual(endpoint.findById(created.id), created);
@@ -30,7 +30,7 @@ describe("SqliteEndpointRepository", () => {
         const { id: nodeId } = node.create(toNodeId(2n ** 64n - 1n));
         const kitchen = room.create("Kitchen");
 
-        const created = endpoint.create(newEndpoint(nodeId, 1, "Old"));
+        const created = endpoint.create(deviceEndpoint(nodeId, 1, "Old"));
         endpoint.setName(created.id, "New");
         endpoint.setRoom(created.id, kitchen.id);
 
@@ -54,9 +54,9 @@ describe("SqliteEndpointRepository", () => {
         const { node, endpoint } = await openDatabase(context);
         const { id: nodeId } = node.create(toNodeId(1n));
         const { id: otherId } = node.create(toNodeId(2n));
-        const second = endpoint.create(newEndpoint(nodeId, 2, "A"));
-        const first = endpoint.create(newEndpoint(nodeId, 1, "B"));
-        endpoint.create(newEndpoint(otherId, 1));
+        const second = endpoint.create(deviceEndpoint(nodeId, 2, "A"));
+        const first = endpoint.create(deviceEndpoint(nodeId, 1, "B"));
+        endpoint.create(deviceEndpoint(otherId, 1));
 
         assert.deepEqual(endpoint.findByNode(nodeId), [first, second]);
     });
@@ -68,9 +68,9 @@ describe("SqliteEndpointRepository", () => {
         const { id: firstNode } = node.create(toNodeId(1n));
         // Created and named against the expected order, so neither can pass for the query's.
         const expected = [
-            newEndpoint(firstNode, 1, "C"),
-            newEndpoint(firstNode, 2, "B"),
-            newEndpoint(secondNode, 1, "A"),
+            deviceEndpoint(firstNode, 1, "C"),
+            deviceEndpoint(firstNode, 2, "B"),
+            deviceEndpoint(secondNode, 1, "A"),
         ]
             .toReversed()
             .map((created) => endpoint.create(created))
@@ -82,15 +82,15 @@ describe("SqliteEndpointRepository", () => {
     test("refuses an endpoint whose node does not exist", async (context) => {
         const { endpoint } = await openDatabase(context);
 
-        assert.throws(() => endpoint.create(newEndpoint(toNodeId(1n), 1)));
+        assert.throws(() => endpoint.create(deviceEndpoint(toNodeId(1n), 1)));
     });
 
     test("refuses a second endpoint with the same number on a node", async (context) => {
         const { node, endpoint } = await openDatabase(context);
         const { id: nodeId } = node.create(toNodeId(1n));
-        endpoint.create(newEndpoint(nodeId, 1));
+        endpoint.create(deviceEndpoint(nodeId, 1));
 
-        assert.throws(() => endpoint.create(newEndpoint(nodeId, 1)));
+        assert.throws(() => endpoint.create(deviceEndpoint(nodeId, 1)));
     });
 
     test("accepts the same number on different nodes", async (context) => {
@@ -98,8 +98,8 @@ describe("SqliteEndpointRepository", () => {
         const { id: firstId } = node.create(toNodeId(1n));
         const { id: secondId } = node.create(toNodeId(2n));
 
-        endpoint.create(newEndpoint(firstId, 1));
-        endpoint.create(newEndpoint(secondId, 1));
+        endpoint.create(deviceEndpoint(firstId, 1));
+        endpoint.create(deviceEndpoint(secondId, 1));
 
         assert.equal(endpoint.findAll().length, 2);
     });
@@ -108,7 +108,7 @@ describe("SqliteEndpointRepository", () => {
         const { node, room, endpoint } = await openDatabase(context);
         const { id: nodeId } = node.create(toNodeId(1n));
         const kitchen = room.create("Kitchen");
-        const created = endpoint.create(newEndpoint(nodeId, 1, "Old"));
+        const created = endpoint.create(deviceEndpoint(nodeId, 1, "Old"));
         endpoint.setRoom(created.id, kitchen.id);
 
         endpoint.setName(created.id, "New");
@@ -120,7 +120,7 @@ describe("SqliteEndpointRepository", () => {
         const { node, room, endpoint } = await openDatabase(context);
         const { id: nodeId } = node.create(toNodeId(1n));
         const kitchen = room.create("Kitchen");
-        const created = endpoint.create(newEndpoint(nodeId, 1));
+        const created = endpoint.create(deviceEndpoint(nodeId, 1));
 
         endpoint.setRoom(created.id, kitchen.id);
         assert.equal(endpoint.findById(created.id)?.roomId, kitchen.id);
@@ -132,8 +132,8 @@ describe("SqliteEndpointRepository", () => {
     test("delete removes the endpoint and leaves its node and the other endpoints alone", async (context) => {
         const { node, endpoint } = await openDatabase(context);
         const created = node.create(toNodeId(1n));
-        const removed = endpoint.create(newEndpoint(created.id, 1));
-        const kept = endpoint.create(newEndpoint(created.id, 2));
+        const removed = endpoint.create(deviceEndpoint(created.id, 1));
+        const kept = endpoint.create(deviceEndpoint(created.id, 2));
 
         endpoint.delete(removed.id);
 
