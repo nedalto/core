@@ -9,7 +9,7 @@ import { openDatabase } from "../helpers/database.ts";
 const isRoomNotFound =
     (id: RoomId) =>
     (error: unknown): boolean =>
-        error instanceof RoomNotFoundError && error.code === "NOT_FOUND_ERROR" && error.data?.roomId === id;
+        error instanceof RoomNotFoundError && error.code === "NOT_FOUND_ERROR" && error.data.roomId === id;
 
 describe("SqliteRoomRepository", () => {
     test("returns the created room by id", async (context) => {

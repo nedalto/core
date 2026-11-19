@@ -12,7 +12,7 @@ const deviceEndpoint = (nodeId: NodeId, number: number, name = "Light"): DeviceE
 const isEndpointNotFound =
     (id: EndpointId) =>
     (error: unknown): boolean =>
-        error instanceof EndpointNotFoundError && error.code === "NOT_FOUND_ERROR" && error.data?.endpointId === id;
+        error instanceof EndpointNotFoundError && error.code === "NOT_FOUND_ERROR" && error.data.endpointId === id;
 
 describe("SqliteEndpointRepository", () => {
     test("creates the endpoint without a room and returns it as stored", async (context) => {

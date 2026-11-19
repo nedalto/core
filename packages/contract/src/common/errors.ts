@@ -13,6 +13,11 @@ interface AppErrorOptions extends ErrorOptions {
 /** Base of the errors a client can receive. `cause` is for the log only. */
 export abstract class AppError extends Error {
     abstract readonly code: ErrorCode;
+
+    /**
+     * What a client receives besides the code. A subclass with a fixed shape narrows it with
+     * `declare readonly data: …`, never with a field: a field is reset to `undefined` after `super()`.
+     */
     readonly data: Readonly<Record<string, unknown>> | undefined;
 
     constructor(message: string, options?: AppErrorOptions) {
@@ -35,7 +40,7 @@ export class ValidationError extends AppError {
     declare readonly data: { readonly issues: readonly ValidationIssue[] };
 
     constructor(message: string, { issues, cause }: ValidationErrorOptions) {
-        super(message, { cause, data: { issues } });
+        super(message, { cause, data: { issues } satisfies ValidationError["data"] });
     }
 }
 

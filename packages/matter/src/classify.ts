@@ -62,7 +62,7 @@ export function classifyCommissioningError(error: unknown): AppError {
 }
 
 /** Why the peer did not answer, or `undefined` when the error is not about reaching it. */
-function unreachableReason(error: unknown): "asleep" | "offline" | undefined {
+function unreachableReason(error: unknown): NodeUnreachableError["data"]["reason"] | undefined {
     // A sleeping device is also one that does not answer, so it is told apart first.
     if (causedBy(error, IcdPeerAsleepError)) {
         return "asleep";
