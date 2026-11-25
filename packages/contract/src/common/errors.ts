@@ -1,3 +1,5 @@
+import type { WireValue } from "./wire.ts";
+
 type ErrorCode =
     | "VALIDATION_ERROR"
     | "NOT_FOUND_ERROR"
@@ -7,7 +9,7 @@ type ErrorCode =
     | "INTERNAL_ERROR";
 
 interface AppErrorOptions extends ErrorOptions {
-    data?: Readonly<Record<string, unknown>>;
+    data?: Readonly<Record<string, WireValue>>;
 }
 
 /** Base of the errors a client can receive. `cause` is for the log only. */
@@ -18,7 +20,7 @@ export abstract class AppError extends Error {
      * What a client receives besides the code. A subclass with a fixed shape narrows it with
      * `declare readonly data: …`, never with a field: a field is reset to `undefined` after `super()`.
      */
-    readonly data: Readonly<Record<string, unknown>> | undefined;
+    readonly data: Readonly<Record<string, WireValue>> | undefined;
 
     constructor(message: string, options?: AppErrorOptions) {
         super(message, options);
@@ -54,12 +56,12 @@ export class ConflictError extends AppError {
     readonly code = "CONFLICT_ERROR";
 }
 
-/** A system outside the hub failed: the Matter SDK, SQLite. */
+/** A system outside the hub failed or refused the request: the Matter SDK, a device, SQLite. */
 export class IntegrationError extends AppError {
     readonly code = "INTEGRATION_ERROR";
 }
 
-/** The target could not be reached, so the request never arrived. */
+/** The target did not answer. */
 export class UnreachableError extends AppError {
     readonly code = "UNREACHABLE_ERROR";
 }

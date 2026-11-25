@@ -5,18 +5,21 @@ import { ControllerBehavior, ServerNode } from "@matter/main/node";
 import { InternalError } from "@nedalto/contract/common/errors.ts";
 import type { Lifecycle } from "@nedalto/contract/common/lifecycle.ts";
 import type { DeviceEventBus } from "@nedalto/contract/device-events.ts";
+import type { EndpointGateway } from "@nedalto/contract/endpoint/ports.ts";
 import type { Logger } from "@nedalto/contract/logger/ports.ts";
 import type { NodeGateway } from "@nedalto/contract/node/ports.ts";
 
+import { MatterEndpointGateway } from "./gateways/endpoint.ts";
 import { MatterNodeGateway } from "./gateways/node.ts";
 import { type VersionAttributes, versionAttributesOf } from "./version.ts";
 
 /**
  * The Matter controller of the hub.
- * `node` is available between `start()` and `stop()`.
+ * `node` and `endpoint` are available between `start()` and `stop()`.
  */
 export interface Controller extends Lifecycle {
     readonly node: NodeGateway;
+    readonly endpoint: EndpointGateway;
 }
 
 /** What the controller writes its log to, and where it reports what it notices of the devices. */
@@ -42,6 +45,7 @@ const BASIC_INFORMATION = {
 interface Open {
     readonly server: ServerNode;
     readonly node: MatterNodeGateway;
+    readonly endpoint: MatterEndpointGateway;
 }
 
 export class MatterController implements Controller {
@@ -66,6 +70,10 @@ export class MatterController implements Controller {
         return this.#opened().node;
     }
 
+    get endpoint(): EndpointGateway {
+        return this.#opened().endpoint;
+    }
+
     async start(): Promise<void> {
         // @matter/node 0.18.0: `ControllerBehavior` is what lets the node discover and commission devices, and the
         // root without Groupcast keeps the hub from offering itself as a device that receives group messages.
@@ -84,9 +92,10 @@ export class MatterController implements Controller {
         // @matter/node 0.18.0: the peers are read from storage on first access and start connecting when the server
         // goes online, so the gateway observes them before `start()`.
         const node = new MatterNodeGateway(this.#logger, this.#bus, server);
-        // What the gateway reports before this returns reaches no one: whoever subscribes later reconciles on its own.
+        const endpoint = new MatterEndpointGateway(this.#bus, server);
+        // What the gateways report before this returns reaches no one: whoever subscribes later reconciles on its own.
         await server.start();
-        this.#open = { server, node };
+        this.#open = { server, node, endpoint };
         this.#logger.notice("controller ready");
     }
 
@@ -100,6 +109,7 @@ export class MatterController implements Controller {
         // @matter/node 0.18.0: closing the server takes every peer offline, destroys its endpoints and reports it
         // deleted, which the gateway would pass on as the deletion of every node, and the hub would forget them all.
         open.node.close();
+        open.endpoint.close();
         await open.server.close();
         this.#logger.notice("controller closed");
     }

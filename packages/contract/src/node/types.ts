@@ -1,4 +1,5 @@
 import type { NodeId } from "../common/ids.ts";
+import type { TaggedInteger } from "../common/wire.ts";
 import type { DeviceEndpoint } from "../endpoint/types.ts";
 
 /** What is stored for a node. */
@@ -13,8 +14,12 @@ export type NodeConnection = "connected" | "disconnected" | "reconnecting" | "wa
 export interface NodeInfo {
     readonly id: NodeId;
 
-    /** The Matter node id, an unsigned 64-bit integer. */
-    readonly matterId: bigint;
+    /**
+     * The Matter node id, an unsigned 64-bit integer, in the form of any integer on the wire, so that it compares with
+     * a node id inside a value, such as an ACL subject.
+     * See `docs/decisions/0004-integers-and-bytes-of-device-values.md`.
+     */
+    readonly matterId: number | TaggedInteger;
 
     /** Epoch milliseconds of the commissioning, or `null` when the node does not report it. */
     readonly commissionedAt: number | null;

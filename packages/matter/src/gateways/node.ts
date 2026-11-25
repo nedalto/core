@@ -23,6 +23,7 @@ import type { CommissioningResult, NodeConnection, NodeInfo } from "@nedalto/con
 
 import { endpointIdOf, isExposed, nodeIdOf, peerOf } from "../addressing.ts";
 import { classifyCommissioningError, classifyDecommissioningError } from "../classify.ts";
+import { normalizeInteger } from "../normalize.ts";
 
 const QR_PREFIX = "MT:";
 
@@ -31,9 +32,6 @@ const invalidSetupCode = (message: string, cause?: unknown): ValidationError =>
         cause,
         issues: [{ path: "setupCode", message: `setupCode ${message}` }],
     });
-
-/** A trimmed `value`, or `undefined` when it is blank. */
-const nonBlank = (value: string | undefined): string | undefined => value?.trim() || undefined;
 
 /** What a client calls each state of the connection to a peer, one to one. */
 export function toNodeConnection(state: NodeConnectionState): NodeConnection {
@@ -50,6 +48,8 @@ export function toNodeConnection(state: NodeConnectionState): NodeConnection {
             return state satisfies never;
     }
 }
+
+const nonBlank = (value: string | undefined): string | undefined => value?.trim() || undefined;
 
 // The name of the nearest endpoint, from `endpoint` up, whose Bridged Device Basic Information gives one, so that the
 // outlets of a bridged power strip take the name of the strip; otherwise that of the node.
@@ -170,7 +170,7 @@ export class MatterNodeGateway implements NodeGateway {
         const basic = peer.stateOf(BasicInformationClient);
         return {
             id: nodeId,
-            matterId: parseNodeId(nodeId),
+            matterId: normalizeInteger(parseNodeId(nodeId)),
             commissionedAt: peer.state.commissioning.commissionedAt ?? null,
             label: basic.nodeLabel ?? "",
             vendorName: basic.vendorName,
@@ -249,11 +249,10 @@ export class MatterNodeGateway implements NodeGateway {
     }
 
     #deviceEndpoints(nodeId: NodeId, peer: ClientNode): DeviceEndpoint[] {
-        // @matter/node 0.18.0: the index of the node holds an endpoint from `installed`, before its state can be read.
-        // `endpoints` indexes the whole tree, unlike `parts`, which holds only the direct children and would miss what
-        // a bridge exposes.
+        // @matter/node 0.18.0: `endpoints` indexes the whole tree, unlike `parts`, which holds only the direct children
+        // and would miss what a bridge exposes.
         return peer.endpoints
-            .filter((endpoint) => isExposed(endpoint) && endpoint.lifecycle.isPartsReady && !endpoint.lifecycle.isGone)
+            .filter(isExposed)
             .map((endpoint) => ({ nodeId, number: endpoint.number, name: defaultName(peer, endpoint) }));
     }
 

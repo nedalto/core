@@ -13,10 +13,10 @@ import { OnOffPlugInUnitDevice } from "@matter/main/devices/on-off-plug-in-unit"
 import { BridgedNodeEndpoint } from "@matter/main/endpoints/bridged-node";
 import { Endpoint, EndpointLifecycle, NodeConnectionState, type ServerNode } from "@matter/main/node";
 import { PeerTimingParameters } from "@matter/main/protocol";
-import { CommissioningFlowType, QrPairingCodeCodec } from "@matter/main/types";
+import { CommissioningFlowType, NodeId as SdkNodeId, QrPairingCodeCodec } from "@matter/main/types";
 
 import { ValidationError } from "@nedalto/contract/common/errors.ts";
-import { toEndpointId, toNodeId } from "@nedalto/contract/common/ids.ts";
+import { parseNodeId, toEndpointId, toNodeId } from "@nedalto/contract/common/ids.ts";
 import {
     DecommissioningRejectedError,
     NodeNotFoundError,
@@ -351,7 +351,7 @@ describe("MatterNodeGateway", () => {
         await assert.rejects(controller.node.decommission(nodeId), (error: unknown) => {
             assert.ok(error instanceof NodeUnreachableError);
             assert.equal(error.code, "UNREACHABLE_ERROR");
-            assert.deepEqual(error.data, { nodeId, reason: "offline" });
+            assert.deepEqual(error.data, { nodeId, reason: "no-response" });
             return true;
         });
         assert.equal(controller.node.getInfo(nodeId)?.id, nodeId);
@@ -385,8 +385,19 @@ describe("MatterNodeGateway", () => {
             softwareVersion: 3,
             softwareVersionString: "3.0.0",
         });
-        assert.equal(toNodeId(matterId), nodeId);
+        assert.equal(matterId, Number(parseNodeId(nodeId)));
         assert.ok(commissionedAt !== null && commissionedAt >= before && commissionedAt <= after);
+    });
+
+    test("getInfo tags a Matter node id beyond the safe range", async (t) => {
+        const network = new TestNetwork(t);
+        const { manualCode } = await network.startDevice();
+        const peer = await network.peer(manualCode, { nodeId: SdkNodeId(2n ** 60n + 1n) });
+        assert.ok(peer.owner !== undefined);
+        const gateway = new MatterNodeGateway(new QuietLogger(), new RecordingBus(), peer.owner);
+        t.after(() => gateway.close());
+
+        assert.deepEqual(gateway.getInfo(toNodeId(2n ** 60n + 1n))?.matterId, { $integer: "1152921504606846977" });
     });
 
     test("getInfo throws NodeNotFoundError on a controller that has commissioned nothing", async (t) => {

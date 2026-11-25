@@ -13,11 +13,19 @@ import {
     DeviceAlreadyCommissionedToThisFabricError,
     MaximumCommissionedFabricsReachedError,
     PasscodeMismatchError,
+    type ResultStatus,
     TransientPeerCommunicationError,
 } from "@matter/main/protocol";
+import { Status } from "@matter/main/types";
 
 import { type AppError, IntegrationError } from "@nedalto/contract/common/errors.ts";
-import type { NodeId } from "@nedalto/contract/common/ids.ts";
+import type { EndpointId, NodeId } from "@nedalto/contract/common/ids.ts";
+import {
+    AttributeNotFoundError,
+    CommandNotFoundError,
+    EndpointUnreachableError,
+    InteractionRejectedError,
+} from "@nedalto/contract/endpoint/errors.ts";
 import {
     CommissioningFailedError,
     CommissioningRejectedError,
@@ -61,7 +69,7 @@ export function classifyCommissioningError(error: unknown): AppError {
     return new IntegrationError("Commissioning failed", { cause: error });
 }
 
-/** Why the peer did not answer, or `undefined` when the error is not about reaching it. */
+// Why the peer did not answer, or `undefined` when the error is not about reaching it.
 function unreachableReason(error: unknown): NodeUnreachableError["data"]["reason"] | undefined {
     // A sleeping device is also one that does not answer, so it is told apart first.
     if (causedBy(error, IcdPeerAsleepError)) {
@@ -70,7 +78,7 @@ function unreachableReason(error: unknown): NodeUnreachableError["data"]["reason
     // @matter/protocol 0.18.0: a peer that cannot be reached fails the operation with an `AbortedError` whose cause
     // is a `PeerUnreachableError`, a subtype of `TransientPeerCommunicationError`.
     if (causedBy(error, NoResponseTimeoutError, TransientPeerCommunicationError)) {
-        return "offline";
+        return "no-response";
     }
     return undefined;
 }
@@ -90,4 +98,53 @@ export function classifyDecommissioningError(nodeId: NodeId, error: unknown): Ap
         return new NodeNotFoundError(nodeId, error);
     }
     return new IntegrationError("Decommissioning failed", { cause: error, data: { nodeId } });
+}
+
+/**
+ * The contract error for what the SDK threw while reading, writing or invoking, which keeps it as the `cause`.
+ * `timedOut` says whether the request ran out of time.
+ */
+export function classifyInteractionError(
+    endpointId: EndpointId,
+    clusterId: number,
+    error: unknown,
+    timedOut: boolean,
+): AppError {
+    // @matter/main 0.18.0: when the abort signal of a request fires, the SDK throws its reason as it is, an
+    // `AbortedError` without a cause, or one caused by the reason, depending on the operation and the session.
+    const reason = unreachableReason(error) ?? (timedOut ? "no-response" : undefined);
+    if (reason !== undefined) {
+        return new EndpointUnreachableError(endpointId, reason, error);
+    }
+    return new IntegrationError("Interaction failed", { cause: error, data: { endpointId, clusterId } });
+}
+
+// @matter/protocol 0.18.0: a device answers a request on a path it does not serve with the status of the first
+// level missing, and a write to an attribute it serves read-only with UnsupportedWrite.
+const MISSING = new Set([Status.UnsupportedEndpoint, Status.UnsupportedCluster]);
+
+/** The contract error for a status other than success that a device answered a read or write of an attribute with. */
+export function classifyAttributeStatus(
+    endpointId: EndpointId,
+    clusterId: number,
+    attributeId: number,
+    answered: ResultStatus,
+): AppError {
+    if (MISSING.has(answered.status) || answered.status === Status.UnsupportedAttribute) {
+        return new AttributeNotFoundError(endpointId, clusterId, attributeId);
+    }
+    return new InteractionRejectedError(endpointId, clusterId, { attributeId }, answered);
+}
+
+/** The contract error for a status other than success that a device answered a command with. */
+export function classifyCommandStatus(
+    endpointId: EndpointId,
+    clusterId: number,
+    commandId: number,
+    answered: ResultStatus,
+): AppError {
+    if (MISSING.has(answered.status) || answered.status === Status.UnsupportedCommand) {
+        return new CommandNotFoundError(endpointId, clusterId, commandId);
+    }
+    return new InteractionRejectedError(endpointId, clusterId, { commandId }, answered);
 }

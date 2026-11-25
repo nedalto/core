@@ -55,9 +55,14 @@ export class DecommissioningRejectedError extends ConflictError {
     }
 }
 
-type NodeUnreachabilityReason = "asleep" | "offline";
+type NodeUnreachabilityReason = "asleep" | "no-response";
 
-/** The node did not answer. `data.reason` tells a sleeping device, which wakes by itself, from an offline one. */
+/**
+ * The node did not answer. `data.reason` says what the hub knows:
+ * - `asleep`: the device sleeps and did not wake within the wait; the hub held the request and never sent it, so
+ *   repeating it is safe.
+ * - `no-response`: no answer arrived, so the hub cannot tell whether the device applied the request.
+ */
 export class NodeUnreachableError extends UnreachableError {
     declare readonly data: { readonly nodeId: NodeId; readonly reason: NodeUnreachabilityReason };
 

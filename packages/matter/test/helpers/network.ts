@@ -1,4 +1,5 @@
 import "../../src/sdk-config.ts";
+import assert from "node:assert/strict";
 import type { TestContext } from "node:test";
 
 import {
@@ -20,6 +21,7 @@ import { OnOffPlugInUnitDevice } from "@matter/main/devices/on-off-plug-in-unit"
 import { AggregatorEndpoint } from "@matter/main/endpoints/aggregator";
 import { BridgedNodeEndpoint } from "@matter/main/endpoints/bridged-node";
 import { type ClientNode, type CommissioningClient, ControllerBehavior, Endpoint, ServerNode } from "@matter/main/node";
+import { FabricManager } from "@matter/main/protocol";
 
 import type { NodeId } from "@nedalto/contract/common/ids.ts";
 
@@ -72,6 +74,18 @@ export async function untilConnected({ controller, bus }: TestController, nodeId
             (change) => change.nodeId === nodeId && change.connection === "connected",
         );
     }
+}
+
+/** Makes the controller of `peer` hold the device as a sleeping one, which the SDK waits for to wake. */
+export async function putToSleep(peer: ClientNode): Promise<void> {
+    const address = peer.peerAddress;
+    assert.ok(address !== undefined && peer.owner !== undefined);
+    // @matter/protocol 0.18.0: the sleep is made up in the registry of intermittently connected devices that the
+    // fabric keeps, which is internal to the SDK; how a real long idle device checks in is not exercised.
+    const icd = peer.owner.env.get(FabricManager).for(address.fabricIndex).icd;
+    // No check-in arrives, so the key and counters are never used.
+    icd.addPeer({ peerNodeId: address.nodeId, key: new Uint8Array(16), counterStart: 0, lastOffset: 0 }, () => {});
+    await icd.wakefulnessFor(address.nodeId)?.awake.emit(false);
 }
 
 /** A simulated network with its own hosts, devices and controllers, closed when the test ends. */
@@ -144,6 +158,22 @@ export class TestNetwork {
         const server = await this.controllerNode();
         await server.start();
         return server.peers.commission({ pairingCode: manualCode, ...options });
+    }
+
+    /**
+     * Commissions `device` with another controller, as another ecosystem would have done, and returns the pairing code
+     * of a window that it opens to share the device: the device gives the fabric of the next controller its second
+     * index, while that controller gives its own fabric the first.
+     */
+    async share({ device, manualCode }: TestDevice): Promise<string> {
+        const other = await this.peer(manualCode);
+        const { manualPairingCode } = await other.openEnhancedCommissioningWindow();
+        // @matter/protocol 0.18.0: with the same mock randomness, the device would draw the key of the first fabric
+        // again for the second, and refuse it (`createCertificateSigningRequest` in `FailsafeContext.js`).
+        const crypto = device.env.get(Crypto);
+        assert.ok("entropic" in crypto);
+        crypto.entropic = true;
+        return manualPairingCode;
     }
 
     /**
