@@ -33,6 +33,7 @@ import { putToSleep, TestNetwork, untilConnected } from "../helpers/network.ts";
 const ON_OFF = 0x06;
 const ON_OFF_ATTRIBUTE = 0x0000;
 const ON_TIME_ATTRIBUTE = 0x4001;
+const FEATURE_MAP_ATTRIBUTE = 0xfffc;
 const OFF_COMMAND = 0x00;
 const ON_COMMAND = 0x01;
 const TOGGLE_COMMAND = 0x02;
@@ -362,6 +363,16 @@ describe("MatterEndpointGateway", () => {
             assert.equal(error.code, "NOT_FOUND_ERROR");
             assert.deepEqual(error.data, { endpointId, clusterId: ON_OFF, attributeId: 0x0005 });
             return true;
+        });
+    });
+
+    test("read returns a global attribute of the cluster", async (t) => {
+        const { controller, endpointId } = await commissionLight(t);
+
+        assert.deepEqual(await controller.endpoint.read(endpointId, ON_OFF, FEATURE_MAP_ATTRIBUTE), {
+            lighting: true,
+            deadFrontBehavior: false,
+            offOnly: false,
         });
     });
 
