@@ -21,7 +21,6 @@ import {
 import {
     CommissioningTimeoutError,
     DeviceAlreadyCommissionedToThisFabricError,
-    FabricManager,
     MaximumCommissionedFabricsReachedError,
     OperativeConnectionFailedError,
     PasscodeMismatchError,
@@ -30,10 +29,16 @@ import {
     Read,
     TransientPeerCommunicationError,
 } from "@matter/main/protocol";
-import { AttributeId, ClusterId, EndpointNumber, FabricIndex, NodeId as SdkNodeId } from "@matter/main/types";
+import { AttributeId, ClusterId, EndpointNumber, FabricIndex, NodeId as SdkNodeId, Status } from "@matter/main/types";
 
 import { type AppError, IntegrationError } from "@nedalto/contract/common/errors.ts";
-import { toNodeId } from "@nedalto/contract/common/ids.ts";
+import { toEndpointId, toNodeId } from "@nedalto/contract/common/ids.ts";
+import {
+    AttributeNotFoundError,
+    CommandNotFoundError,
+    EndpointUnreachableError,
+    InteractionRejectedError,
+} from "@nedalto/contract/endpoint/errors.ts";
 import {
     CommissioningFailedError,
     CommissioningRejectedError,
@@ -42,8 +47,14 @@ import {
     NodeUnreachableError,
 } from "@nedalto/contract/node/errors.ts";
 
-import { classifyCommissioningError, classifyDecommissioningError } from "../src/classify.ts";
-import { TestNetwork } from "./helpers/network.ts";
+import {
+    classifyAttributeStatus,
+    classifyCommandStatus,
+    classifyCommissioningError,
+    classifyDecommissioningError,
+    classifyInteractionError,
+} from "../src/classify.ts";
+import { putToSleep, TestNetwork } from "./helpers/network.ts";
 
 const expectClassified = (
     actual: AppError,
@@ -207,21 +218,21 @@ describe("classifyDecommissioningError", () => {
             sdkError: new NoResponseTimeoutError("no response"),
             type: NodeUnreachableError,
             code: "UNREACHABLE_ERROR",
-            data: { nodeId, reason: "offline" },
+            data: { nodeId, reason: "no-response" },
         },
         {
             title: "a transient failure to reach the device",
             sdkError: new TransientPeerCommunicationError("transient"),
             type: NodeUnreachableError,
             code: "UNREACHABLE_ERROR",
-            data: { nodeId, reason: "offline" },
+            data: { nodeId, reason: "no-response" },
         },
         {
             title: "an unreachable device, a subtype of the transient failure",
             sdkError: new PeerUnreachableError(Millis(5000)),
             type: NodeUnreachableError,
             code: "UNREACHABLE_ERROR",
-            data: { nodeId, reason: "offline" },
+            data: { nodeId, reason: "no-response" },
         },
         {
             // What @matter/main 0.18.0 throws for a device that does not answer.
@@ -229,7 +240,7 @@ describe("classifyDecommissioningError", () => {
             sdkError: new AbortedError("aborted", { cause: new PeerUnreachableError(Millis(90_000)) }),
             type: NodeUnreachableError,
             code: "UNREACHABLE_ERROR",
-            data: { nodeId, reason: "offline" },
+            data: { nodeId, reason: "no-response" },
         },
         {
             title: "another operation on the node",
@@ -271,14 +282,7 @@ describe("classifyDecommissioningError", () => {
         const network = new TestNetwork(t);
         const { manualCode } = await network.startDevice();
         const peer = await network.peer(manualCode);
-        const address = peer.peerAddress;
-        assert.ok(address !== undefined && peer.owner !== undefined);
-        // @matter/protocol 0.18.0: the sleep is made up in the registry of intermittently connected devices that the
-        // fabric keeps, which is internal to the SDK; how a real long idle device checks in is not exercised.
-        const icd = peer.owner.env.get(FabricManager).for(address.fabricIndex).icd;
-        // No check-in arrives, so the key and counters are never used.
-        icd.addPeer({ peerNodeId: address.nodeId, key: new Uint8Array(16), counterStart: 0, lastOffset: 0 }, () => {});
-        await icd.wakefulnessFor(address.nodeId)?.awake.emit(false);
+        await putToSleep(peer);
         const request = {
             ...Read({
                 attributes: [{ endpointId: EndpointNumber(1), clusterId: ClusterId(6), attributeId: AttributeId(0) }],
@@ -297,12 +301,155 @@ describe("classifyDecommissioningError", () => {
             return undefined;
         })();
 
-        const sleeping = toNodeId(address.nodeId);
+        assert.ok(peer.peerAddress !== undefined);
+        const sleeping = toNodeId(peer.peerAddress.nodeId);
         expectClassified(classifyDecommissioningError(sleeping, error), {
             type: NodeUnreachableError,
             code: "UNREACHABLE_ERROR",
             data: { nodeId: sleeping, reason: "asleep" },
             cause: error,
         });
+    });
+});
+
+describe("classifyInteractionError", () => {
+    const endpointId = toEndpointId(toNodeId(1n), 1);
+    const clusterId = 6;
+    const peerAddress = PeerAddress({ fabricIndex: FabricIndex(1), nodeId: SdkNodeId(1n) });
+    const expired = new DOMException("The operation timed out.", "TimeoutError");
+    const cases = [
+        {
+            title: "a sleeping device, even when the request timed out",
+            sdkError: new IcdPeerAsleepError(peerAddress, Millis(1000)),
+            timedOut: true,
+            type: EndpointUnreachableError,
+            code: "UNREACHABLE_ERROR",
+            data: { endpointId, reason: "asleep" },
+        },
+        {
+            title: "a failure to reach the device before the request timed out",
+            sdkError: new AbortedError("aborted", { cause: new PeerUnreachableError(Millis(5000)) }),
+            timedOut: false,
+            type: EndpointUnreachableError,
+            code: "UNREACHABLE_ERROR",
+            data: { endpointId, reason: "no-response" },
+        },
+        {
+            // What @matter/main 0.18.0 throws from `read` and `write` on a session to a device that vanished.
+            title: "the reason of the timeout, as it is",
+            sdkError: expired,
+            timedOut: true,
+            type: EndpointUnreachableError,
+            code: "UNREACHABLE_ERROR",
+            data: { endpointId, reason: "no-response" },
+        },
+        {
+            // What @matter/main 0.18.0 throws from `invoke` on a session to a device that vanished.
+            title: "an abort without a cause when the request timed out",
+            sdkError: new AbortedError("aborted"),
+            timedOut: true,
+            type: EndpointUnreachableError,
+            code: "UNREACHABLE_ERROR",
+            data: { endpointId, reason: "no-response" },
+        },
+        {
+            title: "an abort caused by the timeout",
+            sdkError: new AbortedError("aborted", { cause: expired }),
+            timedOut: true,
+            type: EndpointUnreachableError,
+            code: "UNREACHABLE_ERROR",
+            data: { endpointId, reason: "no-response" },
+        },
+        {
+            title: "any other error before the request timed out",
+            sdkError: new AbortedError("aborted"),
+            timedOut: false,
+            type: IntegrationError,
+            code: "INTEGRATION_ERROR",
+            data: { endpointId, clusterId },
+        },
+    ];
+
+    for (const { title, sdkError, timedOut, type, code, data } of cases) {
+        test(`maps ${title} to ${type.name} with its data`, () => {
+            expectClassified(classifyInteractionError(endpointId, clusterId, sdkError, timedOut), {
+                type,
+                code,
+                data,
+                cause: sdkError,
+            });
+        });
+    }
+});
+
+describe("classifyAttributeStatus", () => {
+    const endpointId = toEndpointId(toNodeId(1n), 1);
+    const clusterId = 6;
+    const attributeId = 0;
+    const notFound = [Status.UnsupportedEndpoint, Status.UnsupportedCluster, Status.UnsupportedAttribute];
+    const rejected = [Status.UnsupportedRead, Status.UnsupportedWrite, Status.UnsupportedAccess, Status.Failure];
+
+    for (const status of notFound) {
+        test(`maps ${Status[status]} to AttributeNotFoundError`, () => {
+            const error = classifyAttributeStatus(endpointId, clusterId, attributeId, { status });
+
+            assert.ok(error instanceof AttributeNotFoundError);
+            assert.deepEqual(error.data, { endpointId, clusterId, attributeId });
+        });
+    }
+
+    for (const status of rejected) {
+        test(`maps ${Status[status]} to InteractionRejectedError with the status`, () => {
+            const error = classifyAttributeStatus(endpointId, clusterId, attributeId, { status });
+
+            assert.ok(error instanceof InteractionRejectedError);
+            assert.deepEqual(error.data, { endpointId, clusterId, attributeId, status });
+        });
+    }
+
+    test("maps a status with the status of the cluster to InteractionRejectedError with both", () => {
+        const error = classifyAttributeStatus(endpointId, clusterId, attributeId, {
+            status: Status.Failure,
+            clusterStatus: 2,
+        });
+
+        assert.ok(error instanceof InteractionRejectedError);
+        assert.deepEqual(error.data, { endpointId, clusterId, attributeId, status: Status.Failure, clusterStatus: 2 });
+    });
+});
+
+describe("classifyCommandStatus", () => {
+    const endpointId = toEndpointId(toNodeId(1n), 1);
+    const clusterId = 6;
+    const commandId = 1;
+    const notFound = [Status.UnsupportedEndpoint, Status.UnsupportedCluster, Status.UnsupportedCommand];
+    const rejected = [Status.UnsupportedAccess, Status.InvalidCommand, Status.Failure];
+
+    for (const status of notFound) {
+        test(`maps ${Status[status]} to CommandNotFoundError`, () => {
+            const error = classifyCommandStatus(endpointId, clusterId, commandId, { status });
+
+            assert.ok(error instanceof CommandNotFoundError);
+            assert.deepEqual(error.data, { endpointId, clusterId, commandId });
+        });
+    }
+
+    for (const status of rejected) {
+        test(`maps ${Status[status]} to InteractionRejectedError with the status`, () => {
+            const error = classifyCommandStatus(endpointId, clusterId, commandId, { status });
+
+            assert.ok(error instanceof InteractionRejectedError);
+            assert.deepEqual(error.data, { endpointId, clusterId, commandId, status });
+        });
+    }
+
+    test("maps a status with the status of the cluster to InteractionRejectedError with both", () => {
+        const error = classifyCommandStatus(endpointId, clusterId, commandId, {
+            status: Status.Failure,
+            clusterStatus: 2,
+        });
+
+        assert.ok(error instanceof InteractionRejectedError);
+        assert.deepEqual(error.data, { endpointId, clusterId, commandId, status: Status.Failure, clusterStatus: 2 });
     });
 });

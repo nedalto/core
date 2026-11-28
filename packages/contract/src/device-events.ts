@@ -1,5 +1,6 @@
 import type { EventBus } from "./common/bus.ts";
 import type { EndpointId, NodeId } from "./common/ids.ts";
+import type { AttributeValue } from "./endpoint/types.ts";
 import type { NodeConnection } from "./node/types.ts";
 
 // Every name starts with `$`, so that a reader tells these from the events clients receive.
@@ -30,6 +31,14 @@ export type DeviceEventMap = Prefixed<{
     /** The endpoint gained or lost clusters, or attributes within one. */
     "$endpoint:clusters-changed": {
         readonly endpointId: EndpointId;
+    };
+
+    /** An attribute of the endpoint took a new value. */
+    "$endpoint:attribute-changed": {
+        readonly endpointId: EndpointId;
+        readonly clusterId: number;
+        readonly attributeId: number;
+        readonly value: AttributeValue;
     };
 }>;
 

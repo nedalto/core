@@ -7,15 +7,18 @@ import { InternalError } from "@nedalto/contract/common/errors.ts";
 import { TestNetwork, untilConnected } from "./helpers/network.ts";
 
 describe("MatterController", () => {
-    test("node is available between start() and stop()", async (t) => {
+    test("node and endpoint are available between start() and stop()", async (t) => {
         const network = new TestNetwork(t);
         const { controller } = network.controller();
 
         assert.throws(() => controller.node, InternalError);
+        assert.throws(() => controller.endpoint, InternalError);
         await controller.start();
         assert.doesNotThrow(() => controller.node);
+        assert.doesNotThrow(() => controller.endpoint);
         await controller.stop();
         assert.throws(() => controller.node, InternalError);
+        assert.throws(() => controller.endpoint, InternalError);
     });
 
     test("stop() does nothing before start()", async (t) => {
